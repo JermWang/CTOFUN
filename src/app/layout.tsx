@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -9,7 +9,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 const SITE_DESCRIPTION =
-  "A bounty-powered dead coin revival protocol. We find abandoned meme coins, vote on the best revival targets, and use bounties to rebuild their communities, content, and culture.";
+  "A bounty-powered dead coin revival hub. We find abandoned meme coins, vote on the best revival targets, and use bounties to rebuild their communities, content, and culture.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://cto.fun"),
@@ -29,6 +29,11 @@ export const metadata: Metadata = {
     title: "CTO.fun — Bring dead coins back to life",
     description: SITE_DESCRIPTION,
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f7faf8",
+  colorScheme: "light",
 };
 
 export default function RootLayout({

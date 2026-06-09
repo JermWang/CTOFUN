@@ -26,6 +26,7 @@ import {
   type Buyback,
 } from "@/lib/mock-data";
 import type { BountyCategory, BountyStatus, DeadCoinStatus, RevivalPhase } from "@/lib/domain";
+import { safeHttpUrl } from "@/lib/utils";
 
 const AVATAR_PALETTE = ["#2dd47e", "#9b7bff", "#f5b54a", "#ff5d6c", "#4ab5f5"];
 function avatarColor(seed: string) {
@@ -175,11 +176,16 @@ export async function getDeadCoins(): Promise<DeadCoin[]> {
   if (!isConfigured()) return mockDeadCoins;
   try {
     const sb = createSupabaseReadClient();
-    const [{ data: coins, error }, { data: users }] = await Promise.all([
-      sb.from("dead_coins").select("*").order("revival_score", { ascending: false }),
-      sb.from("users").select("id, username"),
-    ]);
+    const { data: coins, error } = await sb
+      .from("dead_coins")
+      .select("*")
+      .order("revival_score", { ascending: false });
     if (error || !coins) return mockDeadCoins;
+    // Only resolve usernames for the submitters we actually display.
+    const submitterIds = [...new Set(coins.map((c) => c.submitted_by).filter(Boolean))];
+    const { data: users } = submitterIds.length
+      ? await sb.from("users").select("id, username").in("id", submitterIds)
+      : { data: [] };
     const nameById = new Map((users ?? []).map((u) => [u.id, u.username as string]));
     return coins.map((c) => mapDeadCoin(c, nameById.get(c.submitted_by) ?? "—"));
   } catch {
@@ -216,12 +222,14 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
     name: row.name,
     symbol: row.symbol,
     description: row.description ?? "",
-    imageUrl: row.image_url ?? "",
-    pumpUrl: row.pump_url ?? "",
-    chartUrl: row.chart_url ?? "",
-    websiteUrl: row.website_url ?? "",
-    twitterUrl: row.twitter_url ?? "",
-    telegramUrl: row.telegram_url ?? "",
+    // Re-validate stored URLs on read so rows persisted before sanitization
+    // (or edited out-of-band) still can't surface non-http(s) schemes.
+    imageUrl: safeHttpUrl(row.image_url),
+    pumpUrl: safeHttpUrl(row.pump_url),
+    chartUrl: safeHttpUrl(row.chart_url),
+    websiteUrl: safeHttpUrl(row.website_url),
+    twitterUrl: safeHttpUrl(row.twitter_url),
+    telegramUrl: safeHttpUrl(row.telegram_url),
     createdAt: row.source_created_at ?? "",
     lastTradeAt: row.last_trade_at ?? "",
     dormantDays: row.dormant_days ?? 0,

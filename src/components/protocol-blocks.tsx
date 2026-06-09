@@ -73,7 +73,7 @@ export function SweepBar({ sweep }: { sweep: SweepInfo }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="dot dot-live" />
           <span className="eyebrow" style={{ letterSpacing: ".18em" }}>
-            DISCOVERY SWEEP
+            Recent finds
           </span>
           <span className="mono" style={{ fontSize: 11, color: "var(--dim)" }}>
             · last {sweep.last}
@@ -82,8 +82,8 @@ export function SweepBar({ sweep }: { sweep: SweepInfo }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {([
             ["found", Math.round(found)],
-            ["scanned", fmtNum(sweep.scanned)],
-            ["gate", "review fit"],
+            ["checked", fmtNum(sweep.scanned)],
+            ["review", "qualified"],
           ] as [string, string | number][]).map(([k, v]) => (
             <div key={k} className="lq-soft" style={{ padding: "8px 13px" }}>
               <span

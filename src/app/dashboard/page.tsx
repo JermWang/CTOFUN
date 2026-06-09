@@ -19,7 +19,7 @@ function shortDate(value: string) {
 function FeeFlow() {
   const steps = [
     { k: "Completed bounty", d: "Contributor paid", c: "var(--dim)" },
-    { k: "5% protocol fee", d: "Routed to treasury", c: "var(--violet)" },
+    { k: "5% platform fee", d: "Routed to treasury", c: "var(--violet)" },
     { k: "Token buyback", d: "Open-market buy", c: "var(--green)" },
     { k: "Burn / recycle", d: "Supply reduced", c: "var(--green)" },
   ];
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
                 BUYBACK LEDGER
               </span>
               <span className="mono" style={{ fontSize: 11, color: "var(--dim)" }}>
-                last {ledger.length} · live
+                latest {ledger.length}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px 8px" }}>

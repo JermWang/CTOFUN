@@ -1,6 +1,7 @@
 import "server-only";
 import { MEME_CATEGORY_LABELS } from "@/lib/domain";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { safeHttpUrl } from "@/lib/utils";
 
 const PUMPFUN_COINS_ENDPOINT = "https://frontend-api-v3.pump.fun/coins";
 const DEXSCREENER_TOKEN_ENDPOINT = "https://api.dexscreener.com/latest/dex/tokens";
@@ -333,6 +334,9 @@ function formatCompactUsd(value: number) {
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
+    // Bound each upstream call so a stalled API can't hang the request or
+    // exhaust the serverless execution window.
+    signal: AbortSignal.timeout(8_000),
     headers: {
       accept: "application/json",
       "user-agent": "CTO.fun dead-token sweeper",
@@ -451,12 +455,12 @@ function mapPumpCandidate(
     name: coin.name?.trim() || "Unknown",
     symbol: coin.symbol?.trim() || "UNKNOWN",
     description: coin.description?.trim() || "",
-    imageUrl: coin.image_uri ?? "",
+    imageUrl: safeHttpUrl(coin.image_uri),
     pumpUrl: pumpUrl(mint),
     chartUrl: chartUrl(mint),
-    websiteUrl: coin.website ?? "",
-    twitterUrl: coin.twitter ?? "",
-    telegramUrl: coin.telegram ?? "",
+    websiteUrl: safeHttpUrl(coin.website),
+    twitterUrl: safeHttpUrl(coin.twitter),
+    telegramUrl: safeHttpUrl(coin.telegram),
     createdAt,
     lastTradeAt,
     dormantDays,

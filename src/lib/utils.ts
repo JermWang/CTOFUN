@@ -5,6 +5,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Returns the URL only when it parses as http(s); empty string otherwise.
+ * Use for externally-sourced links/artwork (pump.fun metadata) so javascript:
+ * and other schemes never reach an href/src.
+ */
+export function safeHttpUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Compact USD formatter, e.g. $1.2K, $3.4M */
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";

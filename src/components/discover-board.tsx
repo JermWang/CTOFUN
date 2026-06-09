@@ -9,8 +9,8 @@ import {
   Clock3,
   Flame,
   Grid2X2,
-  ListFilter,
   MessageCircle,
+  Rows3,
   Search,
   ShieldCheck,
 } from "lucide-react";
@@ -40,6 +40,43 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
   const [filter, setFilter] = React.useState<string>("all");
   const [sort, setSort] = React.useState<SortKey>("score");
   const [q, setQ] = React.useState("");
+  const [view, setView] = React.useState<"grid" | "list">("grid");
+  const searchRef = React.useRef<HTMLInputElement>(null);
+
+  // Client-only platform read with a stable server snapshot, so the kbd hint
+  // hydrates cleanly and switches to ⌘K on macOS.
+  const isMac = React.useSyncExternalStore(
+    React.useCallback(() => () => {}, []),
+    () => /mac/i.test(navigator.platform),
+    () => false,
+  );
+  const shortcutHint = isMac ? "⌘ K" : "Ctrl K";
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable;
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      } else if (event.key === "/" && !typing) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      } else if (event.key === "Escape" && target === searchRef.current) {
+        setQ("");
+        searchRef.current?.blur();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const categoryFilters = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -83,15 +120,32 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
       <div className="discover-topbar">
         <div className="discover-search">
           <Search size={18} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search dead coins..." />
-          <kbd>Ctrl K</kbd>
+          <input
+            ref={searchRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search dead coins..."
+          />
+          <kbd>{shortcutHint}</kbd>
         </div>
         <div className="discover-actions" aria-label="Display controls">
-          <button type="button" className="discover-icon-btn" aria-label="Filter tokens">
-            <ListFilter size={17} />
-          </button>
-          <button type="button" className="discover-icon-btn active" aria-label="Grid view">
+          <button
+            type="button"
+            className={"discover-icon-btn" + (view === "grid" ? " active" : "")}
+            aria-label="Grid view"
+            aria-pressed={view === "grid"}
+            onClick={() => setView("grid")}
+          >
             <Grid2X2 size={17} />
+          </button>
+          <button
+            type="button"
+            className={"discover-icon-btn" + (view === "list" ? " active" : "")}
+            aria-label="List view"
+            aria-pressed={view === "list"}
+            onClick={() => setView("list")}
+          >
+            <Rows3 size={17} />
           </button>
         </div>
       </div>
@@ -157,15 +211,21 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
 
       <div className="discover-count">
         <span>{fmtNum(filtered.length)} results</span>
-        <span>Category and market signals are sourced from the sweeper dataset.</span>
+        <span>Category and market signals update from token sources.</span>
       </div>
 
       {filtered.length === 0 ? (
         <div className="discover-empty">No dead coins matched this browse state.</div>
+      ) : view === "list" ? (
+        <div className="discover-list">
+          {filtered.map((c) => (
+            <DiscoverCoinRow key={c.id} c={c} />
+          ))}
+        </div>
       ) : (
         <div className="discover-grid">
           {filtered.map((c) => (
-            <CoinCard key={c.id} c={c} />
+            <DiscoverCoinCard key={c.id} c={c} />
           ))}
         </div>
       )}
@@ -206,7 +266,7 @@ function FeaturedCoin({ c }: { c: ProtoCandidate }) {
   );
 }
 
-function CoinCard({ c }: { c: ProtoCandidate }) {
+export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
   const progress = Math.max(12, Math.min(100, c.qual));
   return (
     <article className="discover-card">
@@ -270,6 +330,44 @@ function CoinCard({ c }: { c: ProtoCandidate }) {
             Fund CTO <ArrowUpRight size={13} />
           </Link>
         </div>
+      </div>
+    </article>
+  );
+}
+
+function DiscoverCoinRow({ c }: { c: ProtoCandidate }) {
+  const progress = Math.max(12, Math.min(100, c.qual));
+  return (
+    <article className="discover-row">
+      <div className="discover-row-art">
+        <TokenImage c={c} />
+      </div>
+      <div className="discover-row-id">
+        <h3>{c.name}</h3>
+        <p>
+          ${c.sym}
+          {c.migrated && <span className="discover-row-flag">Graduated</span>}
+        </p>
+      </div>
+      <div className="discover-row-metrics">
+        <Metric label="MC" value={fmtUsd(c.mcap)} />
+        <Metric label="ATH" value={fmtUsd(c.ath)} />
+        <Metric label="Dormant" value={`${c.dormant}d`} />
+        <Metric label="Replies" value={fmtNum(c.replies)} />
+        <Metric label="Risk" value={c.risk} />
+      </div>
+      <div className="discover-row-fit">
+        <div className="discover-progress" aria-label="Review fit">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+        <span className="discover-row-qual tnum">{c.qual}</span>
+      </div>
+      <div className="discover-row-actions">
+        <ExternalCoinLink href={c.pumpUrl} label="Pump" />
+        <ExternalCoinLink href={c.chartUrl} label="Chart" />
+        <Link href="/bounties">
+          Fund CTO <ArrowUpRight size={13} />
+        </Link>
       </div>
     </article>
   );
