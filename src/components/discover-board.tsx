@@ -1,109 +1,308 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from "react";
-import { CandidateCard, type ProtoCandidate } from "@/components/protocol-blocks";
+import Link from "next/link";
+import {
+  ArrowUpRight,
+  Clock3,
+  Flame,
+  Grid2X2,
+  ListFilter,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+import type { ProtoCandidate } from "@/components/protocol-blocks";
+import { MEME_CATEGORY_LABELS } from "@/lib/domain";
+import { fmtNum, fmtUsd } from "@/lib/format";
 
 const FILTERS = [
-  { k: "all", label: "All" },
+  { k: "all", label: "All dead coins" },
   { k: "dormant", label: "Dormant" },
-  { k: "migrated", label: "Graduated" },
+  { k: "graduated", label: "Graduated" },
   { k: "heat", label: "Past heat" },
   { k: "review", label: "Needs review" },
 ] as const;
 
-type FilterKey = (typeof FILTERS)[number]["k"];
+const SORTS = [
+  { k: "score", label: "Revival score" },
+  { k: "mcap", label: "Market cap" },
+  { k: "ath", label: "ATH" },
+  { k: "dormant", label: "Oldest" },
+  { k: "replies", label: "Replies" },
+] as const;
+
+type SortKey = (typeof SORTS)[number]["k"];
 
 export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) {
-  const [filter, setFilter] = React.useState<FilterKey>("all");
+  const [filter, setFilter] = React.useState<string>("all");
+  const [sort, setSort] = React.useState<SortKey>("score");
   const [q, setQ] = React.useState("");
 
-  const filtered = candidates.filter((c) => {
-    if (filter === "dormant" && c.dormant < 150) return false;
-    if (filter === "migrated" && !c.migrated) return false;
-    if (filter === "heat" && c.replies < 400) return false;
-    if (filter === "review" && !(c.qual >= 60 && c.qual < 76)) return false;
-    const n = q.trim().toLowerCase();
-    if (n && !(c.name + " " + c.sym).toLowerCase().includes(n)) return false;
-    return true;
-  });
+  const categoryFilters = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const candidate of candidates) {
+      for (const category of candidate.categories ?? []) {
+        counts.set(category, (counts.get(category) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 8)
+      .map(([slug, count]) => ({ slug, count, label: MEME_CATEGORY_LABELS[slug] ?? slug }));
+  }, [candidates]);
 
-  const sorted = [...filtered].sort((a, b) => b.qual - a.qual);
+  const filtered = React.useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return candidates
+      .filter((c) => {
+        if (filter === "dormant" && c.dormant < 150) return false;
+        if (filter === "graduated" && !c.migrated) return false;
+        if (filter === "heat" && (c.ath ?? 0) < 50_000 && c.replies < 250) return false;
+        if (filter === "review" && !(c.qual >= 60 && c.qual < 76)) return false;
+        if (filter.startsWith("cat:") && !(c.categories ?? []).includes(filter.slice(4))) return false;
+        if (
+          needle &&
+          !(c.name + " " + c.sym + " " + c.blurb + " " + (c.categories ?? []).join(" "))
+            .toLowerCase()
+            .includes(needle)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => metricFor(b, sort) - metricFor(a, sort));
+  }, [candidates, filter, q, sort]);
+
+  const top = filtered.slice(0, 3);
 
   return (
-    <section className="section tight wrap">
-      {/* search + filters */}
-      <div className="lq-glass" style={{ padding: 14, marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-            <span
-              style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--faint)" }}
+    <section className="discover-shell wrap">
+      <div className="discover-topbar">
+        <div className="discover-search">
+          <Search size={18} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search dead coins..." />
+          <kbd>Ctrl K</kbd>
+        </div>
+        <div className="discover-actions" aria-label="Display controls">
+          <button type="button" className="discover-icon-btn" aria-label="Filter tokens">
+            <ListFilter size={17} />
+          </button>
+          <button type="button" className="discover-icon-btn active" aria-label="Grid view">
+            <Grid2X2 size={17} />
+          </button>
+        </div>
+      </div>
+
+      <div className="discover-hero-strip">
+        <div>
+          <span className="eyebrow">EXPLORE DEAD COINS</span>
+          <h2>Dormant Pump.fun launches with real revival signals</h2>
+        </div>
+        <div className="discover-strip-stats">
+          <StatPill label="Candidates" value={fmtNum(candidates.length)} />
+          <StatPill label="Qualified" value={fmtNum(candidates.filter((c) => c.qual >= 60).length)} />
+          <StatPill label="Categories" value={fmtNum(categoryFilters.length)} />
+        </div>
+      </div>
+
+      {top.length > 0 && (
+        <div className="discover-featured">
+          {top.map((c) => (
+            <FeaturedCoin key={c.id} c={c} />
+          ))}
+        </div>
+      )}
+
+      <div className="discover-filterbar">
+        <div className="discover-tabs" role="tablist" aria-label="Discover filters">
+          {FILTERS.map((f) => (
+            <button
+              key={f.k}
+              type="button"
+              role="tab"
+              aria-selected={filter === f.k}
+              className={filter === f.k ? "active" : ""}
+              onClick={() => setFilter(f.k)}
             >
-              ⌕
-            </span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name or ticker"
-              style={{
-                width: "100%",
-                height: 40,
-                paddingLeft: 34,
-                paddingRight: 12,
-                borderRadius: 999,
-                color: "var(--ink)",
-                border: "1px solid rgba(255,255,255,.1)",
-                background: "rgba(255,255,255,.02)",
-                fontSize: 14,
-                outline: "none",
-                fontFamily: "var(--sans)",
-              }}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {FILTERS.map((f) => (
-              <button
-                key={f.k}
-                onClick={() => setFilter(f.k)}
-                className="lq-chip"
-                style={{
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  cursor: "pointer",
-                  fontFamily: "var(--sans)",
-                  border: "1px solid " + (filter === f.k ? "rgba(0,229,153,.4)" : "rgba(255,255,255,.1)"),
-                  background: filter === f.k ? "rgba(0,229,153,.1)" : "rgba(255,255,255,.02)",
-                  color: filter === f.k ? "var(--green)" : "var(--dim)",
-                }}
-              >
-                {f.label}
-              </button>
+              {f.label}
+            </button>
+          ))}
+          {categoryFilters.map((category) => (
+            <button
+              key={category.slug}
+              type="button"
+              role="tab"
+              aria-selected={filter === `cat:${category.slug}`}
+              className={filter === `cat:${category.slug}` ? "active" : ""}
+              onClick={() => setFilter(`cat:${category.slug}`)}
+            >
+              {category.label} <span className="tab-count">{category.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="discover-sort">
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort coins">
+            {SORTS.map((s) => (
+              <option key={s.k} value={s.k}>
+                {s.label}
+              </option>
             ))}
-          </div>
+          </select>
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <span className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>
-          {filtered.length} candidate{filtered.length !== 1 ? "s" : ""}
-        </span>
-        <span className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>
-          sorted by qualification score
-        </span>
+      <div className="discover-count">
+        <span>{fmtNum(filtered.length)} results</span>
+        <span>Category and market signals are sourced from the sweeper dataset.</span>
       </div>
 
-      {sorted.length === 0 ? (
-        <div className="lq-soft" style={{ padding: 48, textAlign: "center", color: "var(--dim)" }}>
-          No candidates matched this filter.
-        </div>
+      {filtered.length === 0 ? (
+        <div className="discover-empty">No dead coins matched this browse state.</div>
       ) : (
-        <div className="grid g2">
-          {sorted.map((c) => (
-            <CandidateCard key={c.id} c={c} href="/bounties" />
+        <div className="discover-grid">
+          {filtered.map((c) => (
+            <CoinCard key={c.id} c={c} />
           ))}
         </div>
       )}
     </section>
   );
+}
+
+function metricFor(c: ProtoCandidate, sort: SortKey): number {
+  if (sort === "mcap") return c.mcap ?? 0;
+  if (sort === "ath") return c.ath ?? 0;
+  if (sort === "dormant") return c.dormant ?? 0;
+  if (sort === "replies") return c.replies ?? 0;
+  return c.qual ?? 0;
+}
+
+function StatPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="discover-stat-pill">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function FeaturedCoin({ c }: { c: ProtoCandidate }) {
+  return (
+    <Link className="discover-feature-card" href="/bounties">
+      <TokenImage c={c} />
+      <div>
+        <span className="discover-chip">Top revival fit</span>
+        <h3>{c.name}</h3>
+        <p>
+          ${c.sym} / {fmtUsd(c.mcap)} MC / {c.dormant}d dormant
+        </p>
+      </div>
+      <ArrowUpRight size={17} />
+    </Link>
+  );
+}
+
+function CoinCard({ c }: { c: ProtoCandidate }) {
+  const progress = Math.max(12, Math.min(100, c.qual));
+  return (
+    <article className="discover-card">
+      <div className="discover-art">
+        <TokenImage c={c} />
+        <div className="discover-score">{c.qual}</div>
+        {c.migrated && <div className="discover-live">Graduated</div>}
+      </div>
+
+      <div className="discover-card-body">
+        <div className="discover-card-head">
+          <div>
+            <h3>{c.name}</h3>
+            <p>${c.sym}</p>
+          </div>
+          <strong>{fmtUsd(c.mcap)} <span>MC</span></strong>
+        </div>
+
+        <div className="discover-minirow">
+          <span>
+            <Clock3 size={13} /> {c.dormant}d
+          </span>
+          <span>
+            <MessageCircle size={13} /> {fmtNum(c.replies)}
+          </span>
+          <span>
+            <ShieldCheck size={13} /> {c.risk}
+          </span>
+        </div>
+
+        <p className="discover-blurb">{c.blurb}</p>
+
+        {(c.categories ?? []).length > 0 && (
+          <div className="discover-category-row">
+            {(c.categories ?? []).slice(0, 3).map((category) => (
+              <span key={category}>{MEME_CATEGORY_LABELS[category] ?? category}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="discover-metrics">
+          <Metric label="ATH" value={fmtUsd(c.ath)} />
+          <Metric label="Liq" value={fmtUsd(c.liquidityUsd)} />
+          <Metric label="24h Vol" value={fmtUsd(c.volume24hUsd)} />
+        </div>
+
+        <div className="discover-progress" aria-label={`Qualification score ${c.qual}`}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+
+        <div className="discover-reasons">
+          {c.reasons.slice(0, 2).map((r) => (
+            <span key={r}>{r}</span>
+          ))}
+        </div>
+
+        <div className="discover-card-actions">
+          <ExternalCoinLink href={c.pumpUrl} label="Pump" />
+          <ExternalCoinLink href={c.chartUrl} label="Chart" />
+          <Link href="/bounties">
+            Fund CTO <ArrowUpRight size={13} />
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ExternalCoinLink({ href, label }: { href?: string; label: string }) {
+  if (!href) return <span className="disabled-link">{label}</span>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {label} <ArrowUpRight size={13} />
+    </a>
+  );
+}
+
+function TokenImage({ c }: { c: ProtoCandidate }) {
+  const [failed, setFailed] = React.useState(false);
+  if (!c.imageUrl || failed) {
+    return (
+      <div className="token-fallback" aria-label={`${c.name} token art fallback`}>
+        <Flame size={24} />
+        <span>{c.sym.slice(0, 3).toUpperCase()}</span>
+      </div>
+    );
+  }
+
+  return <img src={c.imageUrl} alt={`${c.name} token artwork`} loading="lazy" onError={() => setFailed(true)} />;
 }

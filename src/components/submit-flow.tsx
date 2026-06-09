@@ -39,16 +39,37 @@ const REASONS = [
   "High ATH cap",
   "Unused meta angle",
 ];
-const CATS = ["OG / 4chan", "Frogs", "Cats", "Dogs", "Animals", "AI", "Politics", "Absurdist"];
+const CATS = [
+  "OG / 4chan",
+  "Classic",
+  "Animals",
+  "Dogs",
+  "Cats",
+  "Frogs",
+  "TikTok",
+  "2024 Meta",
+  "AI",
+  "Politics",
+  "Anime",
+  "Gaming",
+  "Celebrities",
+  "Absurdist",
+];
 const CAT_SLUG: Record<string, string> = {
   "OG / 4chan": "og",
+  Classic: "classic",
+  Animals: "animals",
   Frogs: "frogs",
   Cats: "cats",
   Dogs: "dogs",
-  Animals: "animals",
+  TikTok: "tiktok",
+  "2024 Meta": "y2024",
   AI: "ai",
   Politics: "politics",
-  Absurdist: "classic",
+  Anime: "anime",
+  Gaming: "gaming",
+  Celebrities: "celebs",
+  Absurdist: "absurd",
 };
 
 const inputStyle: React.CSSProperties = {

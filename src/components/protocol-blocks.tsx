@@ -193,6 +193,18 @@ export interface ProtoCandidate {
   replies: number;
   ath: number | null;
   mcap: number;
+  imageUrl?: string;
+  chartUrl?: string;
+  websiteUrl?: string;
+  twitterUrl?: string;
+  telegramUrl?: string;
+  createdAt?: string;
+  liquidityUsd?: number | null;
+  volume24hUsd?: number | null;
+  historicalVolumeUsd?: number | null;
+  categories?: string[];
+  categoryConfidence?: number;
+  discoverySignals?: string[];
   reasons: string[];
   pumpUrl?: string;
 }

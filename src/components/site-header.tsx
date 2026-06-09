@@ -28,7 +28,7 @@ export function SiteHeader() {
       <div className="hdr">
         <div className="wrap hdr-in">
           <Link href="/" className="brand" aria-label="CTO.fun home">
-            <SiteLogo variant="light" height={30} priority />
+            <SiteLogo variant="dark" height={30} priority />
           </Link>
           <nav className="nav">
             {NAV.map(([href, label]) => (

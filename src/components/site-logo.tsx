@@ -5,11 +5,11 @@ import * as React from "react";
 //   text-logo.png        — dark ".fun" text, for light backgrounds
 //   white-text-logo.png  — white ".fun" text, for dark backgrounds (default)
 // The "cto" glyph + arrow are identical in both; only the ".fun" text color
-// differs. The site UI is dark, so most surfaces use the "light" variant.
+// differs. The site UI is light, so most surfaces use the "dark" variant.
 // ============================================================================
 
 export function SiteLogo({
-  variant = "light",
+  variant = "dark",
   height = 28,
   className,
   priority,

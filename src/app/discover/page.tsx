@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DiscoverBoard } from "@/components/discover-board";
-import { AsciiShader } from "@/components/protocol-ui";
 import { SweepBar } from "@/components/protocol-blocks";
+import { AsciiShader } from "@/components/protocol-ui";
 import { getDiscoveredDeadTokens } from "@/lib/data";
 import { toProtoCandidate } from "@/lib/proto-adapters";
 
@@ -26,14 +26,14 @@ export default async function DiscoverPage() {
 
   return (
     <div className="proto">
-      <section className="hero lq-frame" style={{ paddingBottom: 4 }}>
-        <AsciiShader opacity={0.1} mask="head" cols={170} rows={26} fontSize={13} />
-        <div className="wrap" style={{ position: "relative", zIndex: 1, paddingTop: 44 }}>
+      <section className="hero lq-frame" style={{ paddingBottom: 6 }}>
+        <AsciiShader opacity={0.07} mask="head" cols={170} rows={20} fontSize={13} />
+        <div className="wrap" style={{ position: "relative", zIndex: 1, paddingTop: 34 }}>
           <div className="eyebrow" style={{ letterSpacing: ".2em" }}>
-            DISCOVER · TOKEN DISCOVERY TERMINAL
+            DISCOVER / TOKEN BROWSER
           </div>
-          <h1 style={{ fontSize: 38, fontWeight: 600, letterSpacing: "-.025em", margin: "12px 0 22px" }}>
-            Dormant Pump.fun-origin candidates
+          <h1 style={{ fontSize: 34, fontWeight: 650, letterSpacing: "0", margin: "10px 0 18px" }}>
+            Dead Pump.fun coins to revive
           </h1>
           <SweepBar sweep={sweep} />
         </div>

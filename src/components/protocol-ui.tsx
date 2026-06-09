@@ -1,17 +1,10 @@
 "use client";
 
-// ============================================================================
-// CTO.fun — UI kit. Faithful port of the Claude "Liquid" prototype primitives
-// (design additions/app/ui.jsx): hooks, formatters, animated ASCII shader,
-// mark, sparkline, count-up score ring, status dots, risk + source badges.
-// ============================================================================
-
 import * as React from "react";
 import { fmtNum, fmtUsd } from "@/lib/format";
 
 const { useState, useEffect, useRef } = React;
 
-// Re-export for client consumers that already import these from here.
 export { fmtNum, fmtUsd };
 
 export function useCountUp(target: number, ms = 1200): number {
@@ -59,11 +52,10 @@ export function useSweepFeed(data: SweepCandidate[], count = 5, interval = 2700)
   return rows;
 }
 
-/* ----- ASCII geometric shader ----- */
 type ShaderMask = "hero" | "head" | "panel";
 
 export function AsciiShader({
-  opacity = 0.16,
+  opacity = 0.08,
   mask = "hero",
   cols = 168,
   rows = 52,
@@ -77,31 +69,33 @@ export function AsciiShader({
 }) {
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => {
-    const ramp = " ·∙:-=+*▢◇◆";
+    const ramp = "   ..::--==++**##";
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0;
     let last = 0;
-    let t = reduce ? 1.2 : 0;
+    let t = reduce ? 1.2 : 0.35;
+
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      if (now - last < 95) return;
+      if (now - last < 180) return;
       last = now;
-      if (!reduce) t += 0.05;
+      if (!reduce) t += 0.018;
+
       let out = "";
       for (let y = 0; y < rows; y++) {
         const ny = (y / rows) * 2 - 1;
         for (let x = 0; x < cols; x++) {
           const nx = (x / cols) * 2 - 1;
-          const rot = t * 0.25;
+          const rot = t * 0.08;
           const rx = nx * Math.cos(rot) - ny * Math.sin(rot);
           const ry = nx * Math.sin(rot) + ny * Math.cos(rot);
-          const diamond = Math.abs(rx) + Math.abs(ry);
+          const diamond = Math.abs(rx * 0.88) + Math.abs(ry * 1.12);
           const d = Math.sqrt(nx * nx + ny * ny);
           let v =
-            Math.sin(diamond * 7 - t * 1.3) +
-            Math.sin(d * 11 - t * 1.6) +
-            Math.sin((nx - ny) * 6 + t) * 0.7;
-          v = (v + 2.7) / 5.4;
+            Math.sin(diamond * 5.2 - t * 0.85) * 0.78 +
+            Math.sin(d * 8.5 - t * 0.7) * 0.56 +
+            Math.sin((nx - ny) * 3.8 + t * 0.55) * 0.36;
+          v = (v + 1.7) / 3.4;
           const i = Math.max(0, Math.min(ramp.length - 1, Math.floor(v * ramp.length)));
           out += ramp[i];
         }
@@ -109,12 +103,13 @@ export function AsciiShader({
       }
       if (ref.current) ref.current.textContent = out;
     };
+
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [cols, rows]);
 
   const masks: Record<ShaderMask, string> = {
-    hero: "linear-gradient(100deg, transparent 6%, rgba(0,0,0,.22) 32%, #000 60%), radial-gradient(120% 120% at 80% 50%, #000 55%, transparent 100%)",
+    hero: "linear-gradient(100deg, transparent 6%, rgba(0,0,0,.26) 32%, #000 60%), radial-gradient(120% 120% at 80% 50%, #000 55%, transparent 100%)",
     head: "linear-gradient(180deg, #000 0%, transparent 92%), radial-gradient(90% 130% at 86% 0%, #000 30%, transparent 80%)",
     panel: "radial-gradient(100% 100% at 100% 0%, #000 0%, transparent 72%)",
   };
@@ -147,17 +142,15 @@ export function AsciiShader({
   );
 }
 
-/* ----- mark ----- */
 export function Mark({ size = 17 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M13 6.2a4.2 4.2 0 1 0 0 7.6" stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round" />
       <rect x="6" y="9.2" width="8" height="1.7" rx="0.85" fill="var(--green)" />
     </svg>
   );
 }
 
-/* ----- sparkline ----- */
 export function Spark({
   data,
   w = 56,
@@ -177,14 +170,13 @@ export function Spark({
   const pts = data.map((d, i) => [(i / (data.length - 1)) * w, h - ((d - min) / rng) * (h - 3) - 1.5]);
   const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
   return (
-    <svg width={w} height={h} style={{ display: "block", overflow: "visible" }}>
+    <svg width={w} height={h} style={{ display: "block", overflow: "visible" }} aria-hidden="true">
       {fill && <path d={line + ` L${w} ${h} L0 ${h} Z`} fill={color} opacity="0.12" />}
       <path d={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-/* ----- score ring ----- */
 export function ScoreRing({
   value,
   size = 64,
@@ -203,8 +195,8 @@ export function ScoreRing({
   const v = useCountUp(value, 1100);
   return (
     <div style={{ position: "relative", width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(14,35,27,0.12)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -243,7 +235,6 @@ export function ScoreRing({
   );
 }
 
-/** Animated count-up number (client). */
 export function CountUp({ value, kind = "num", ms = 1400 }: { value: number; kind?: "num" | "raw"; ms?: number }) {
   const v = useCountUp(value, ms);
   return <>{kind === "num" ? fmtNum(Math.round(v)) : Math.round(v)}</>;
@@ -268,9 +259,9 @@ export function StatusDot({ kind = "idle" }: { kind?: string }) {
 
 export function RiskTag({ level }: { level: string }) {
   const m: Record<string, [string, string, string]> = {
-    Low: ["var(--green)", "rgba(0,229,153,.28)", "rgba(0,229,153,.06)"],
-    Med: ["var(--amber)", "rgba(245,181,74,.3)", "rgba(245,181,74,.07)"],
-    High: ["var(--red)", "rgba(255,93,108,.32)", "rgba(255,93,108,.08)"],
+    Low: ["var(--green)", "rgba(0,191,122,.32)", "rgba(0,191,122,.08)"],
+    Med: ["var(--amber)", "rgba(196,126,23,.32)", "rgba(196,126,23,.08)"],
+    High: ["var(--red)", "rgba(220,51,76,.32)", "rgba(220,51,76,.08)"],
   };
   const [color, borderColor, background] = m[level] || m.Med;
   return (
@@ -281,10 +272,9 @@ export function RiskTag({ level }: { level: string }) {
 }
 
 export function SourceBadge() {
-  return <span className="srcbadge lq-chip">◆ Pump.fun-origin</span>;
+  return <span className="srcbadge lq-chip">Pump.fun-origin</span>;
 }
 
-/** Map a numeric qualification/revival score to the prototype risk band. */
 export function riskFromScore(score: number): "Low" | "Med" | "High" {
   return score >= 76 ? "Low" : score >= 60 ? "Med" : "High";
 }
