@@ -1,60 +1,112 @@
 "use client";
 
 import * as React from "react";
-import { DeadCoinCard } from "@/components/blocks";
-import { cn } from "@/lib/utils";
-import type { DeadCoin } from "@/lib/mock-data";
-import { MEME_CATEGORIES } from "@/lib/domain";
+import Link from "next/link";
+import { fmtNum, fmtUsd, RiskTag, ScoreRing, StatusDot } from "@/components/protocol-ui";
+import { STATUS_MAP, StatusPill } from "@/components/protocol-blocks";
+import type { ProtoGrave } from "@/lib/proto-adapters";
 
-export function GraveyardBoard({ coins }: { coins: DeadCoin[] }) {
-  const [active, setActive] = React.useState<string>("all");
+const ORDER = ["newly", "review", "candidate", "vote", "selected", "active", "graduated"];
 
-  // Only show category chips that at least one coin actually uses.
-  const present = new Set(coins.flatMap((c) => c.categories));
-  const categories = MEME_CATEGORIES.filter((c) => present.has(c.slug));
-
-  const filtered =
-    active === "all" ? coins : coins.filter((c) => c.categories.includes(active));
+export function GraveyardBoard({ graves }: { graves: ProtoGrave[] }) {
+  const [tab, setTab] = React.useState("all");
+  const tabs: [string, string][] = [
+    ["all", "All"],
+    ...ORDER.filter((o) => graves.some((g) => g.status === o)).map((o) => [o, STATUS_MAP[o].label] as [string, string]),
+  ];
+  const list = tab === "all" ? graves : graves.filter((g) => g.status === tab);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <div className="mb-6 flex flex-wrap gap-2">
-        <Chip label="All" active={active === "all"} onClick={() => setActive("all")} />
-        {categories.map((c) => (
-          <Chip
-            key={c.slug}
-            label={`${c.emoji} ${c.label}`}
-            active={active === c.slug}
-            onClick={() => setActive(c.slug)}
-          />
+    <section className="section tight wrap">
+      {/* status hierarchy rail */}
+      <div className="lq-glass" style={{ padding: 16, marginBottom: 22 }}>
+        <div
+          className="mono"
+          style={{
+            fontSize: 9.5,
+            letterSpacing: ".14em",
+            textTransform: "uppercase",
+            color: "var(--faint)",
+            marginBottom: 12,
+          }}
+        >
+          Status hierarchy
+        </div>
+        <div className="pipe">
+          {ORDER.map((o, i) => (
+            <React.Fragment key={o}>
+              <div className="lq-soft lq-chip pipe-node" style={{ padding: "8px 13px 8px 11px" }}>
+                <StatusDot kind={STATUS_MAP[o].dot} />
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{STATUS_MAP[o].label}</span>
+              </div>
+              {i < ORDER.length - 1 && <span className="pipe-link" />}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 }}>
+        {tabs.map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className="lq-chip"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 500,
+              padding: "8px 14px",
+              borderRadius: 999,
+              cursor: "pointer",
+              fontFamily: "var(--sans)",
+              border: "1px solid " + (tab === k ? "rgba(0,229,153,.4)" : "rgba(255,255,255,.1)"),
+              background: tab === k ? "rgba(0,229,153,.1)" : "rgba(255,255,255,.02)",
+              color: tab === k ? "var(--green)" : "var(--dim)",
+            }}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="py-16 text-center text-muted-foreground">No coins in this category yet.</p>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((coin) => (
-            <DeadCoinCard key={coin.id} coin={coin} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-        active
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-border text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
+      <div className="grid" style={{ gap: 10 }}>
+        {list.map((g) => (
+          <Link
+            key={g.id + g.status}
+            href={`/graveyard/${g.id}`}
+            className="lq-soft hoverlift"
+            style={{
+              padding: 16,
+              cursor: "pointer",
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flexWrap: "wrap" }}>
+              <ScoreRing value={g.score} size={48} stroke={4} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 17, fontWeight: 600 }}>{g.name}</span>
+                  <span className="mono" style={{ fontSize: 12, color: "var(--green)" }}>
+                    ${g.sym}
+                  </span>
+                </div>
+                <div className="mono" style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 3 }}>
+                  {fmtNum(g.holders)} holders · {g.dormant}d dormant · {fmtUsd(g.ath)} ATH
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <RiskTag level={g.risk} />
+              <StatusPill status={g.status} />
+              <span className="mono" style={{ color: "var(--dim)", fontSize: 16 }}>
+                →
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

@@ -1,31 +1,39 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/blocks";
+import { AsciiShader } from "@/components/protocol-ui";
 import { GraveyardBoard } from "@/components/graveyard-board";
 import { getDeadCoins } from "@/lib/data";
+import { toProtoGrave } from "@/lib/proto-adapters";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "The Graveyard",
-  description: "A public list of dead and abandoned meme coins submitted by the community.",
+  description: "Every revival candidate by status — from newly found to graduated, with safety signal and score.",
 };
 
 export default async function GraveyardPage() {
   const deadCoins = await getDeadCoins();
-  const sorted = [...deadCoins].sort((a, b) => b.revivalScore - a.revivalScore);
+  const graves = deadCoins.map(toProtoGrave);
 
   return (
-    <>
-      <PageHeader
-        title="The Graveyard"
-        subtitle="Abandoned meme coins submitted by the community. Filter by origin — 4chan/OG, animals, frogs, TikTok, the 2024 meta — and sort by revival score."
-      >
-        <Button asChild>
-          <Link href="/submit">Submit a Dead Coin</Link>
-        </Button>
-      </PageHeader>
+    <div className="proto">
+      <section className="hero lq-frame" style={{ paddingBottom: 4 }}>
+        <AsciiShader opacity={0.1} mask="head" cols={170} rows={26} fontSize={13} />
+        <div className="wrap" style={{ position: "relative", zIndex: 1, paddingTop: 44, paddingBottom: 8 }}>
+          <div className="eyebrow" style={{ letterSpacing: ".2em" }}>
+            GRAVEYARD · REVIVAL PIPELINE
+          </div>
+          <h1 style={{ fontSize: 38, fontWeight: 600, letterSpacing: "-.025em", margin: "12px 0 8px" }}>
+            Every candidate, by status
+          </h1>
+          <p style={{ color: "var(--dim)", maxWidth: 540, lineHeight: 1.6 }}>
+            From newly found to graduated. Each token carries an explicit safety signal and a weighted revival score
+            before it ever reaches a vote.
+          </p>
+        </div>
+      </section>
 
-      <GraveyardBoard coins={sorted} />
-    </>
+      <GraveyardBoard graves={graves} />
+    </div>
   );
 }

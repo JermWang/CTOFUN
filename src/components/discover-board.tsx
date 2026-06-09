@@ -1,241 +1,109 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import {
-  ArrowUpDown,
-  ExternalLink,
-  Flame,
-  Search,
-  TimerReset,
-  WalletCards,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { cn, formatNumber, formatUsd } from "@/lib/utils";
-
-interface DiscoveryCandidate {
-  id: string;
-  source: "pump.fun";
-  mint: string;
-  name: string;
-  symbol: string;
-  description: string;
-  pumpUrl: string;
-  chartUrl: string;
-  createdAt: string;
-  lastTradeAt: string;
-  dormantDays: number;
-  replyCount: number;
-  migrated: boolean;
-  marketCapUsd: number;
-  liquidityUsd: number | null;
-  volume24hUsd: number | null;
-  athMarketCapUsd: number | null;
-  athMarketCapAt: string;
-  qualificationScore: number;
-  revivalScore: number;
-  qualificationReasons: string[];
-  sweptAt: string;
-}
+import { CandidateCard, type ProtoCandidate } from "@/components/protocol-blocks";
 
 const FILTERS = [
-  { key: "all", label: "All candidates" },
-  { key: "dormant", label: "Dormant" },
-  { key: "migrated", label: "Graduated" },
-  { key: "heat", label: "Past heat" },
+  { k: "all", label: "All" },
+  { k: "dormant", label: "Dormant" },
+  { k: "migrated", label: "Graduated" },
+  { k: "heat", label: "Past heat" },
+  { k: "review", label: "Needs review" },
 ] as const;
 
-type FilterKey = (typeof FILTERS)[number]["key"];
+type FilterKey = (typeof FILTERS)[number]["k"];
 
-export function DiscoverBoard({ candidates }: { candidates: DiscoveryCandidate[] }) {
+export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) {
   const [filter, setFilter] = React.useState<FilterKey>("all");
-  const [query, setQuery] = React.useState("");
+  const [q, setQ] = React.useState("");
 
-  const filtered = React.useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return candidates
-      .filter((candidate) => {
-        if (filter === "dormant") return candidate.dormantDays >= 90;
-        if (filter === "migrated") return candidate.migrated;
-        if (filter === "heat") return candidate.replyCount >= 35 || candidate.qualificationScore >= 70;
-        return true;
-      })
-      .filter((candidate) => {
-        if (!needle) return true;
-        return [candidate.name, candidate.symbol, candidate.mint]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle);
-      });
-  }, [candidates, filter, query]);
+  const filtered = candidates.filter((c) => {
+    if (filter === "dormant" && c.dormant < 150) return false;
+    if (filter === "migrated" && !c.migrated) return false;
+    if (filter === "heat" && c.replies < 400) return false;
+    if (filter === "review" && !(c.qual >= 60 && c.qual < 76)) return false;
+    const n = q.trim().toLowerCase();
+    if (n && !(c.name + " " + c.sym).toLowerCase().includes(n)) return false;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => b.qual - a.qual);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <Card className="liquid-glass mb-6 p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, ticker, or mint"
-              className="pl-9"
+    <section className="section tight wrap">
+      {/* search + filters */}
+      <div className="lq-glass" style={{ padding: 14, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+            <span
+              style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--faint)" }}
+            >
+              ⌕
+            </span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search name or ticker"
+              style={{
+                width: "100%",
+                height: 40,
+                paddingLeft: 34,
+                paddingRight: 12,
+                borderRadius: 999,
+                color: "var(--ink)",
+                border: "1px solid rgba(255,255,255,.1)",
+                background: "rgba(255,255,255,.02)",
+                fontSize: 14,
+                outline: "none",
+                fontFamily: "var(--sans)",
+              }}
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {FILTERS.map((item) => (
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {FILTERS.map((f) => (
               <button
-                key={item.key}
-                onClick={() => setFilter(item.key)}
-                className={cn(
-                  "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                  filter === item.key
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground",
-                )}
+                key={f.k}
+                onClick={() => setFilter(f.k)}
+                className="lq-chip"
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  cursor: "pointer",
+                  fontFamily: "var(--sans)",
+                  border: "1px solid " + (filter === f.k ? "rgba(0,229,153,.4)" : "rgba(255,255,255,.1)"),
+                  background: filter === f.k ? "rgba(0,229,153,.1)" : "rgba(255,255,255,.02)",
+                  color: filter === f.k ? "var(--green)" : "var(--dim)",
+                }}
               >
-                {item.label}
+                {f.label}
               </button>
             ))}
           </div>
         </div>
-      </Card>
+      </div>
 
-      {filtered.length === 0 ? (
-        <Card className="p-12 text-center text-muted-foreground">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <span className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>
+          {filtered.length} candidate{filtered.length !== 1 ? "s" : ""}
+        </span>
+        <span className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>
+          sorted by qualification score
+        </span>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="lq-soft" style={{ padding: 48, textAlign: "center", color: "var(--dim)" }}>
           No candidates matched this filter.
-        </Card>
+        </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((candidate) => (
-            <CandidateCard key={candidate.mint} candidate={candidate} />
+        <div className="grid g2">
+          {sorted.map((c) => (
+            <CandidateCard key={c.id} c={c} href="/bounties" />
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
-}
-
-function CandidateCard({ candidate }: { candidate: DiscoveryCandidate }) {
-  return (
-    <Card className="group overflow-hidden p-5 transition-colors hover:border-primary/40 hover:bg-surface-2">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-xl font-semibold leading-tight">{candidate.name}</h3>
-            <span className="font-mono text-sm text-primary">${candidate.symbol}</span>
-            <Badge variant="primary">Pump.fun</Badge>
-            {candidate.migrated && <Badge variant="secondary">Graduated</Badge>}
-          </div>
-          <p className="mt-2 line-clamp-2 max-w-2xl text-sm text-muted-foreground">
-            {candidate.description || "No Pump.fun description available."}
-          </p>
-        </div>
-        <div className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-right">
-          <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-            qualify
-          </div>
-          <div className="text-2xl font-semibold tabular-nums text-primary">
-            {candidate.qualificationScore}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-2 sm:grid-cols-4">
-        <MiniMetric
-          icon={<TimerReset className="size-4" />}
-          label="Dormant"
-          value={`${formatNumber(candidate.dormantDays)}d`}
-        />
-        <MiniMetric
-          icon={<Flame className="size-4" />}
-          label="Replies"
-          value={formatNumber(candidate.replyCount)}
-        />
-        <MiniMetric
-          icon={<WalletCards className="size-4" />}
-          label="Mkt cap"
-          value={formatUsd(candidate.marketCapUsd)}
-        />
-        <MiniMetric
-          icon={<ArrowUpDown className="size-4" />}
-          label="ATH cap"
-          value={candidate.athMarketCapUsd == null ? "Untracked" : formatUsd(candidate.athMarketCapUsd)}
-        />
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {candidate.qualificationReasons.map((reason) => (
-          <Badge key={reason} variant="outline">
-            {reason}
-          </Badge>
-        ))}
-      </div>
-
-      <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-mono text-foreground">{shortMint(candidate.mint)}</span>
-          <span className="mx-2">/</span>
-          Last trade {formatDate(candidate.lastTradeAt)}
-          {candidate.volume24hUsd != null && (
-            <>
-              <span className="mx-2">/</span>
-              24h vol {formatUsd(candidate.volume24hUsd)}
-            </>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <a href={candidate.pumpUrl} target="_blank" rel="noreferrer">
-              Pump source <ExternalLink />
-            </a>
-          </Button>
-          <Button size="sm" variant="ghost" asChild>
-            <a href={candidate.chartUrl} target="_blank" rel="noreferrer">
-              Chart <ExternalLink />
-            </a>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/bounties">Fund CTO bounties</Link>
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function MiniMetric({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-3">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
-      </div>
-      <div className="mt-2 font-semibold tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function shortMint(mint: string) {
-  return `${mint.slice(0, 5)}...${mint.slice(-5)}`;
-}
-
-function formatDate(value: string) {
-  if (!value) return "unknown";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
 }

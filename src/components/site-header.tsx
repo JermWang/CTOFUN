@@ -1,65 +1,117 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BrandMark } from "@/components/brand-mark";
-import { cn } from "@/lib/utils";
-import { AuthButton } from "@/components/auth-button";
+import { usePrivy } from "@privy-io/react-auth";
+import { SiteLogo } from "@/components/site-logo";
+import { usePrivyConfigured } from "@/components/providers";
+import { shortAddress } from "@/lib/utils";
 
-const NAV = [
-  { href: "/discover", label: "Discover" },
-  { href: "/graveyard", label: "Graveyard" },
-  { href: "/revivals", label: "Revivals" },
-  { href: "/bounties", label: "Bounties" },
-  { href: "/guilds", label: "Guilds" },
-  { href: "/dashboard", label: "Proof of Revival" },
+const NAV: [string, string][] = [
+  ["/discover", "Discover"],
+  ["/graveyard", "Graveyard"],
+  ["/bounties", "Bounties"],
+  ["/dashboard", "Proof"],
 ];
+
+function isActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const [drawer, setDrawer] = React.useState(false);
 
   return (
-    <header className="liquid-glass sticky top-0 z-50 border-b bg-background/70">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-bold tracking-tight">
-          <span className="grid size-8 place-items-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/30">
-            <BrandMark className="size-6" />
-          </span>
-          <span className="text-lg">
-            CTO<span className="text-primary">.fun</span>
-          </span>
-        </Link>
-
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/submit"
-            className="hidden rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 sm:inline-block"
-          >
-            Submit a Dead Coin
+    <header className="proto sticky top-0 z-[60]">
+      <div className="hdr">
+        <div className="wrap hdr-in">
+          <Link href="/" className="brand" aria-label="CTO.fun home">
+            <SiteLogo variant="light" height={30} priority />
           </Link>
-          <AuthButton />
+          <nav className="nav">
+            {NAV.map(([href, label]) => (
+              <Link key={href} href={href} className={isActive(pathname, href) ? "on" : ""}>
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="hdr-cta">
+            <Link href="/submit" className="btn btn-sm btn-ghost desktop-only">
+              Submit a token
+            </Link>
+            <span className="desktop-only">
+              <ConnectButton />
+            </span>
+            <button className="burger" onClick={() => setDrawer(!drawer)} aria-label="Menu">
+              {drawer ? "✕" : "☰"}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className={"drawer" + (drawer ? " open" : "")}>
+        {NAV.map(([href, label]) => (
+          <Link
+            key={href}
+            href={href}
+            className={isActive(pathname, href) ? "on" : ""}
+            onClick={() => setDrawer(false)}
+          >
+            {label}
+          </Link>
+        ))}
+        <Link href="/submit" onClick={() => setDrawer(false)}>
+          Submit a token
+        </Link>
+        <div style={{ marginTop: 18 }}>
+          <ConnectButton full />
         </div>
       </div>
     </header>
+  );
+}
+
+function ConnectButton({ full }: { full?: boolean }) {
+  const configured = usePrivyConfigured();
+  const style = full ? { width: "100%" } : undefined;
+  if (!configured) {
+    return (
+      <button
+        className={"btn btn-sm btn-solid"}
+        style={style}
+        disabled
+        title="Set NEXT_PUBLIC_PRIVY_APP_ID to enable login"
+      >
+        Connect
+      </button>
+    );
+  }
+  return <ConnectedButton full={full} />;
+}
+
+function ConnectedButton({ full }: { full?: boolean }) {
+  const { ready, authenticated, user, login, logout } = usePrivy();
+  const style = full ? { width: "100%" } : undefined;
+
+  if (!ready) {
+    return (
+      <button className="btn btn-sm btn-outline" style={style} disabled>
+        …
+      </button>
+    );
+  }
+  if (!authenticated) {
+    return (
+      <button className="btn btn-sm btn-solid" style={style} onClick={() => login()}>
+        Connect
+      </button>
+    );
+  }
+  const address = user?.wallet?.address ?? (user?.email?.address as string | undefined) ?? "account";
+  return (
+    <button className="btn btn-sm btn-outline" style={style} onClick={() => logout()} title="Log out">
+      {shortAddress(address)}
+    </button>
   );
 }

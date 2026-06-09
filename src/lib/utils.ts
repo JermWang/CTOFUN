@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Compact USD formatter, e.g. $1.2K, $3.4M */
 export function formatUsd(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -17,12 +17,12 @@ export function formatUsd(value: number | null | undefined): string {
 }
 
 export function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("en-US", { notation: "compact" }).format(value);
 }
 
 export function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Date(value).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -31,13 +31,13 @@ export function formatDate(value: string | Date | null | undefined): string {
 }
 
 export function shortAddress(addr: string | null | undefined, chars = 4): string {
-  if (!addr) return "—";
+  if (!addr) return "-";
   if (addr.length <= chars * 2 + 2) return addr;
-  return `${addr.slice(0, chars + 2)}…${addr.slice(-chars)}`;
+  return `${addr.slice(0, chars + 2)}...${addr.slice(-chars)}`;
 }
 
 export function timeAgo(value: string | Date | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
   const intervals: [number, string][] = [

@@ -1,23 +1,20 @@
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/blocks";
 import { BountiesBoard } from "@/components/bounties-board";
 import { getBounties } from "@/lib/data";
+import { toProtoBounty } from "@/lib/proto-adapters";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Bounties",
-  description: "Complete tasks to rebuild dead coins, earn rewards, and build reputation.",
+  title: "Bounties — CTO Work Queue",
+  description:
+    "Funded takeover work. Pick up a bounty, submit proof, get paid on approval. A 5% fee funds token buybacks.",
 };
 
 export default async function BountiesPage() {
   const bounties = await getBounties();
+  const proto = bounties.map(toProtoBounty);
+  const totalReward = proto.reduce((s, b) => s + b.reward, 0);
 
-  return (
-    <>
-      <PageHeader
-        title="Bounties"
-        subtitle="The labor engine. Complete tasks to rebuild dead coins, earn rewards, and build reputation. A 5% platform fee on completed bounties funds transparent token buybacks."
-      />
-      <BountiesBoard bounties={bounties} />
-    </>
-  );
+  return <BountiesBoard bounties={proto} totalReward={totalReward} />;
 }

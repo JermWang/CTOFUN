@@ -8,13 +8,27 @@ import { SiteFooter } from "@/components/site-footer";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
+const SITE_DESCRIPTION =
+  "A bounty-powered dead coin revival protocol. We find abandoned meme coins, vote on the best revival targets, and use bounties to rebuild their communities, content, and culture.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cto.fun"),
   title: {
     default: "CTO.fun — Bring dead coins back to life",
     template: "%s · CTO.fun",
   },
-  description:
-    "A bounty-powered dead coin revival protocol. We find abandoned meme coins, vote on the best revival targets, and use bounties to rebuild their communities, content, and culture.",
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "CTO.fun",
+    title: "CTO.fun — Bring dead coins back to life",
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CTO.fun — Bring dead coins back to life",
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
