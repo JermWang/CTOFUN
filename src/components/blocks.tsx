@@ -39,14 +39,14 @@ export function RevivalScore({ score, className }: { score: number; className?: 
     <div className={cn("flex flex-col items-center", className)}>
       <div
         className={cn(
-          "grid size-16 place-items-center rounded-full border-2 border-current font-bold tabular-nums",
+          "grid size-16 place-items-center rounded-full border-2 border-current text-xs font-bold uppercase tracking-wide",
           ring,
         )}
       >
-        {score}
+        Review
       </div>
       <span className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-        Revival
+        Signal
       </span>
     </div>
   );

@@ -1,12 +1,24 @@
+import Image from "next/image";
 import * as React from "react";
+import textLogo from "../../public/text-logo.png";
+import whiteTextLogo from "../../public/white-text-logo.png";
 
 // ============================================================================
 // Official CTO.fun wordmark. Two PNG variants live in /public:
-//   text-logo.png        — dark ".fun" text, for light backgrounds
-//   white-text-logo.png  — white ".fun" text, for dark backgrounds (default)
-// The "cto" glyph + arrow are identical in both; only the ".fun" text color
-// differs. The site UI is light, so most surfaces use the "dark" variant.
+//   text-logo.png       - dark ".fun" text, for light backgrounds
+//   white-text-logo.png - white ".fun" text, for dark backgrounds
+// The files include whitespace around the artwork, so this component crops the
+// rendered box to the actual wordmark bounds before scaling.
 // ============================================================================
+
+const SOURCE_WIDTH = 672;
+const SOURCE_HEIGHT = 328;
+const LOGO_CROP = {
+  left: 25,
+  top: 89,
+  width: 625,
+  height: 140,
+};
 
 export function SiteLogo({
   variant = "dark",
@@ -19,17 +31,37 @@ export function SiteLogo({
   className?: string;
   priority?: boolean;
 }) {
-  const src = variant === "light" ? "/white-text-logo.png" : "/text-logo.png";
+  const src = variant === "light" ? whiteTextLogo : textLogo;
+  const scale = height / LOGO_CROP.height;
+  const renderedWidth = Math.round(LOGO_CROP.width * scale);
+  const renderedSourceHeight = SOURCE_HEIGHT * scale;
+
   return (
-    // Plain <img>: the intrinsic dimensions vary, and height + width:auto keeps
-    // the aspect ratio crisp without hard-coding the source size.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt="CTO.fun"
+    <span
       className={className}
-      style={{ height, width: "auto", display: "block" }}
-      fetchPriority={priority ? "high" : undefined}
-    />
+      style={{
+        display: "block",
+        height,
+        overflow: "hidden",
+        position: "relative",
+        width: renderedWidth,
+      }}
+    >
+      <Image
+        src={src}
+        alt="CTO.fun"
+        width={SOURCE_WIDTH}
+        height={SOURCE_HEIGHT}
+        preload={priority}
+        sizes={`${renderedWidth}px`}
+        style={{
+          display: "block",
+          height: renderedSourceHeight,
+          maxWidth: "none",
+          transform: `translate(${-LOGO_CROP.left * scale}px, ${-LOGO_CROP.top * scale}px)`,
+          width: "auto",
+        }}
+      />
+    </span>
   );
 }

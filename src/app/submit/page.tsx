@@ -5,21 +5,24 @@ import { getDiscoveredDeadTokens } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Submit a Token",
+  title: "Request a Revival",
   description:
-    "Paste a Pump.fun-origin mint and we pull what we can on-chain. Add your dormancy read and revival case — the council reviews every submission.",
+    "Token holders can request a Pump.fun-origin token revival by connecting a wallet and submitting the mint for council review.",
 };
 
 export default async function SubmitPage() {
   const tokens = await getDiscoveredDeadTokens();
   const known: KnownToken[] = tokens.slice(0, 40).map((t) => ({
+    mint: t.mint,
     sym: t.symbol,
     name: t.name,
     ath: t.athMarketCapUsd ?? t.marketCapUsd,
     replies: t.replyCount,
     dormant: t.dormantDays,
     migrated: t.migrated,
-    last: t.lastTradeAt ? new Date(t.lastTradeAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—",
+    last: t.lastTradeAt ? new Date(t.lastTradeAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "-",
+    chartUrl: t.chartUrl,
+    marketCap: t.marketCapUsd,
   }));
 
   return <SubmitFlow known={known} />;

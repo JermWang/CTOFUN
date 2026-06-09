@@ -40,12 +40,11 @@ export function BrandMark({ className }: { className?: string }) {
 export function HeroBrandPanel({
   coinName,
   ticker,
-  score,
   className,
 }: {
   coinName: string;
   ticker: string;
-  score: number;
+  score?: number;
   className?: string;
 }) {
   const rows = [
@@ -102,10 +101,10 @@ export function HeroBrandPanel({
         <div className="flex items-end justify-between gap-4">
           <div>
             <div className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">
-              revival score
+              review state
             </div>
-            <div className="mt-1 text-5xl font-semibold tracking-tight tabular-nums">
-              {score}
+            <div className="mt-1 text-3xl font-semibold tracking-tight">
+              Council queued
             </div>
           </div>
           <div className="mb-2 flex h-12 w-28 items-end gap-1.5" aria-hidden="true">

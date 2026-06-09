@@ -6,7 +6,7 @@ import {
   getGlobalMetrics,
 } from "@/lib/data";
 import { fmtNum, fmtUsd } from "@/lib/format";
-import { AsciiShader, ScoreRing, RiskTag } from "@/components/protocol-ui";
+import { AsciiShader, RiskTag } from "@/components/protocol-ui";
 import { BountyGrid, CtaPanel, LiveSweep, Pipeline } from "@/components/protocol-blocks";
 import { WORKFLOW, toProtoBounty, toSweepCandidate } from "@/lib/proto-adapters";
 import { REVIVAL_PHASES } from "@/lib/domain";
@@ -126,12 +126,15 @@ export default async function Home() {
                 className="lq-soft"
                 style={{ padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}
               >
-                <ScoreRing value={featured.revivalScore} size={120} stroke={7} label="revival score" />
+                <div className="eyebrow" style={{ letterSpacing: ".16em", color: "var(--green)" }}>
+                  COUNCIL REVIEW
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 650 }}>{phaseLabel}</div>
                 <div
                   className="mono"
                   style={{ fontSize: 10.5, color: "var(--faint)", textAlign: "center", letterSpacing: ".06em" }}
                 >
-                  weighted · meme · safety · community · liquidity · lore
+                  holder demand · safety · lore · market history
                 </div>
               </div>
             </div>

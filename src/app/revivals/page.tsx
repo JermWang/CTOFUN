@@ -70,8 +70,8 @@ export default async function RevivalsPage() {
             <div>
               <h2 className="text-2xl font-bold tracking-tight">Vote on the next revival</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                No staking required. Influence = token participation + reputation +
-                contribution history + anti-sybil score.
+                No staking required. Influence = token participation, reputation,
+                contribution history, and anti-sybil checks.
               </p>
             </div>
           </div>

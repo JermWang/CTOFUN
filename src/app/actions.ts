@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Connection, PublicKey } from "@solana/web3.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getOrCreateUser } from "@/lib/auth";
-import { computeRevivalScore, MEME_CATEGORIES, type RevivalScoreInput } from "@/lib/domain";
+import { MEME_CATEGORIES } from "@/lib/domain";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -57,29 +58,57 @@ function cleanVoteChoice(value: unknown): VoteChoiceInput | null {
   return typeof value === "string" && VOTE_CHOICES.has(value) ? (value as VoteChoiceInput) : null;
 }
 
-function cleanScore(value: unknown): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(10, Math.round(n)));
-}
-
-function cleanScores(scores: Partial<RevivalScoreInput> | null | undefined): RevivalScoreInput {
-  return {
-    meme: cleanScore(scores?.meme),
-    community: cleanScore(scores?.community),
-    safety: cleanScore(scores?.safety),
-    liquidity: cleanScore(scores?.liquidity),
-    lore: cleanScore(scores?.lore),
-    ticker: cleanScore(scores?.ticker),
-    contributorInterest: cleanScore(scores?.contributorInterest),
-  };
-}
-
 function cleanCategories(categories: unknown): string[] {
   if (!Array.isArray(categories)) return [];
   return categories
     .filter((c): c is string => typeof c === "string" && MEME_CATEGORY_SLUGS.has(c))
     .slice(0, 8);
+}
+
+function submissionTokenMint(): string {
+  return cleanText(process.env.REVIVAL_REQUEST_TOKEN_MINT || process.env.NEXT_PUBLIC_TOKEN_MINT, 90);
+}
+
+function solanaRpcUrl(): string {
+  return cleanText(process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL, 500);
+}
+
+function minSubmissionTokenAmount(): number {
+  const n = Number(process.env.REVIVAL_REQUEST_MIN_TOKEN_AMOUNT ?? 1);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+async function verifySubmissionTokenHolding(walletAddress: string | null): Promise<ActionResult> {
+  const mint = submissionTokenMint();
+  if (!mint) return { ok: true };
+  if (!walletAddress) {
+    return { ok: false, error: "Connect a Solana wallet that holds the CTO token to request a revival." };
+  }
+
+  const rpcUrl = solanaRpcUrl();
+  if (!rpcUrl) {
+    return { ok: false, error: "Token-gated submissions are not configured. Set SOLANA_RPC_URL." };
+  }
+
+  try {
+    const owner = new PublicKey(walletAddress);
+    const tokenMint = new PublicKey(mint);
+    const connection = new Connection(rpcUrl, "confirmed");
+    const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: tokenMint });
+    const required = minSubmissionTokenAmount();
+
+    for (const account of accounts.value) {
+      // Parsed SPL token shape from getParsedTokenAccountsByOwner.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tokenAmount = (account.account.data as any)?.parsed?.info?.tokenAmount;
+      const uiAmount = Number(tokenAmount?.uiAmountString ?? tokenAmount?.uiAmount ?? 0);
+      if (Number.isFinite(uiAmount) && uiAmount >= required) return { ok: true };
+    }
+    return { ok: false, error: "Your connected wallet does not hold enough CTO tokens to request a revival." };
+  } catch (e) {
+    logActionError("verifySubmissionTokenHolding", e);
+    return { ok: false, error: "Could not verify your CTO token balance. Please try again." };
+  }
 }
 
 async function enforceRateLimit(
@@ -127,7 +156,6 @@ export interface SubmitCoinInput {
   reasonRevive: string;
   riskNotes?: string;
   categories: string[];
-  scores: RevivalScoreInput;
 }
 
 export async function submitDeadCoin(
@@ -136,16 +164,11 @@ export async function submitDeadCoin(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const user = await getOrCreateUser(token);
-    const admin = createSupabaseAdminClient();
-    const limited = await enforceRateLimit(admin, user.id, "submit_dead_coin", 5, 60 * 60);
-    if (!limited.ok) return { ok: false, error: limited.error };
-
     const name = cleanText(input.name, 120);
     const ticker = cleanTicker(input.ticker);
     const contractAddress = cleanText(input.contractAddress, 160);
     const reasonDied = cleanText(input.reasonDied);
     const reasonRevive = cleanText(input.reasonRevive);
-    const scores = cleanScores(input.scores);
 
     if (!name || !ticker) {
       return { ok: false, error: "Name and ticker are required." };
@@ -156,6 +179,12 @@ export async function submitDeadCoin(
     if (!reasonDied || !reasonRevive) {
       return { ok: false, error: "Revival story fields are required." };
     }
+    const holderGate = await verifySubmissionTokenHolding(user.wallet);
+    if (!holderGate.ok) return { ok: false, error: holderGate.error };
+
+    const admin = createSupabaseAdminClient();
+    const limited = await enforceRateLimit(admin, user.id, "submit_dead_coin", 5, 60 * 60);
+    if (!limited.ok) return { ok: false, error: limited.error };
 
     const { data, error } = await admin
       .from("dead_coins")
@@ -170,14 +199,6 @@ export async function submitDeadCoin(
         holder_count: cleanOptionalNumber(input.holderCount),
         old_socials: cleanText(input.oldSocials) ? { raw: cleanText(input.oldSocials) } : {},
         status: "newly_submitted",
-        meme_score: scores.meme,
-        community_score: scores.community,
-        safety_score: scores.safety,
-        liquidity_score: scores.liquidity,
-        lore_score: scores.lore,
-        ticker_score: scores.ticker,
-        contributor_interest: scores.contributorInterest,
-        revival_score: computeRevivalScore(scores),
         reason_died: reasonDied,
         reason_revive: reasonRevive,
         risk_notes: cleanText(input.riskNotes) || null,

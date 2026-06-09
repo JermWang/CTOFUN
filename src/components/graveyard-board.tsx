@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { fmtNum, fmtUsd, RiskTag, ScoreRing, StatusDot } from "@/components/protocol-ui";
+import { fmtNum, fmtUsd, RiskTag, StatusDot } from "@/components/protocol-ui";
 import { STATUS_MAP, StatusPill } from "@/components/protocol-blocks";
 import type { ProtoGrave } from "@/lib/proto-adapters";
 
@@ -84,7 +84,10 @@ export function GraveyardBoard({ graves }: { graves: ProtoGrave[] }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flexWrap: "wrap" }}>
-              <ScoreRing value={g.score} size={48} stroke={4} />
+              <span className="statuspill">
+                <StatusDot kind={STATUS_MAP[g.status]?.dot ?? "idle"} />
+                Review
+              </span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 17, fontWeight: 600 }}>{g.name}</span>

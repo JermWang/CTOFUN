@@ -110,10 +110,8 @@ export type VoteChoice =
   | "yes"
   | "no";
 
-// ----------------------------------------------------------------------------
 // Meme categories — the origin/theme of a dead coin. A coin can have several.
 // Used to organize and filter the Graveyard. Extend freely.
-// ----------------------------------------------------------------------------
 export interface MemeCategoryMeta {
   slug: string;
   label: string;
@@ -173,44 +171,6 @@ export const CORE_GUILDS: GuildMeta[] = [
   { slug: "raid-captains", name: "Raid Captains", category: "social", description: "Coordinate safe public posting campaigns." },
   { slug: "revival-council", name: "Revival Council", category: "revival_audit", description: "Reviews candidates, disputes, safety." },
 ];
-
-// ----------------------------------------------------------------------------
-// Revival scoring — weighted score out of 100.
-// ----------------------------------------------------------------------------
-export interface RevivalScoreInput {
-  meme: number; // 0-10
-  community: number; // 0-10
-  safety: number; // 0-10
-  liquidity: number; // 0-10
-  lore: number; // 0-10
-  ticker: number; // 0-10
-  contributorInterest: number; // 0-10
-}
-
-export const REVIVAL_SCORE_WEIGHTS = {
-  meme: 0.25,
-  community: 0.2,
-  safety: 0.2,
-  liquidity: 0.1,
-  lore: 0.1,
-  ticker: 0.1,
-  contributorInterest: 0.05,
-} as const;
-
-/** Returns an overall revival score out of 100. */
-export function computeRevivalScore(i: RevivalScoreInput): number {
-  const w = REVIVAL_SCORE_WEIGHTS;
-  const weighted =
-    i.meme * w.meme +
-    i.community * w.community +
-    i.safety * w.safety +
-    i.liquidity * w.liquidity +
-    i.lore * w.lore +
-    i.ticker * w.ticker +
-    i.contributorInterest * w.contributorInterest;
-  // weighted is out of 10 → scale to 100
-  return Math.round(weighted * 10);
-}
 
 /** 5% standard platform fee on completed bounties (funds token buybacks). */
 export const PLATFORM_FEE_RATE = 0.05;

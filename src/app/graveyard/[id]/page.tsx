@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { fmtUsd } from "@/lib/format";
-import { AsciiShader, ScoreRing, SourceBadge } from "@/components/protocol-ui";
+import { AsciiShader, SourceBadge } from "@/components/protocol-ui";
 import { BountyGrid, VoteWidget } from "@/components/protocol-blocks";
 import { getBounties, getCampaigns, getDeadCoinById, getGraduatedCampaigns } from "@/lib/data";
 import { PHASE_LABELS, toProtoBounty, toProtoRevival } from "@/lib/proto-adapters";
@@ -109,16 +109,15 @@ export default async function RevivalDetailPage({ params }: { params: Promise<{ 
               </div>
             </div>
 
-            {/* score breakdown */}
+            {/* council review */}
             <div className="lq-glass" style={{ padding: 18 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <ScoreRing value={r.score} size={84} stroke={6} label="revival" />
                 <div>
                   <div className="eyebrow" style={{ letterSpacing: ".16em" }}>
-                    WEIGHTED REVIVAL SCORE
+                    COUNCIL REVIEW SIGNALS
                   </div>
                   <p className="mono" style={{ fontSize: 11, color: "var(--faint)", marginTop: 8, lineHeight: 1.5, maxWidth: 280 }}>
-                    Meme 25% · community 20% · safety 20% · liquidity 10% · lore 10% · ticker 10% · interest 5%
+                    Holder demand, safety, market history, lore, ticker quality, and visible community interest.
                   </p>
                 </div>
               </div>
@@ -127,8 +126,8 @@ export default async function RevivalDetailPage({ params }: { params: Promise<{ 
                   <div key={b.k}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                       <span style={{ fontSize: 12, color: "var(--dim)" }}>{b.k}</span>
-                      <span className="mono tnum" style={{ fontSize: 11 }}>
-                        {b.v}/10
+                      <span className="mono" style={{ fontSize: 11, color: b.v >= 6 ? "var(--green)" : "var(--faint)" }}>
+                        {b.v >= 7 ? "strong" : b.v >= 5 ? "review" : "weak"}
                       </span>
                     </div>
                     <div className="scorebar">

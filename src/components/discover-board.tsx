@@ -27,7 +27,7 @@ const FILTERS = [
 ] as const;
 
 const SORTS = [
-  { k: "score", label: "Revival score" },
+  { k: "score", label: "Best match" },
   { k: "mcap", label: "Market cap" },
   { k: "ath", label: "ATH" },
   { k: "dormant", label: "Oldest" },
@@ -212,7 +212,7 @@ function CoinCard({ c }: { c: ProtoCandidate }) {
     <article className="discover-card">
       <div className="discover-art">
         <TokenImage c={c} />
-        <div className="discover-score">{c.qual}</div>
+        <div className="discover-score">Fit</div>
         {c.migrated && <div className="discover-live">Graduated</div>}
       </div>
 
@@ -253,7 +253,7 @@ function CoinCard({ c }: { c: ProtoCandidate }) {
           <Metric label="24h Vol" value={fmtUsd(c.volume24hUsd)} />
         </div>
 
-        <div className="discover-progress" aria-label={`Qualification score ${c.qual}`}>
+        <div className="discover-progress" aria-label="Review fit">
           <span style={{ width: `${progress}%` }} />
         </div>
 

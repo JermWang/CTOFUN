@@ -14,7 +14,6 @@ import {
   fmtNum,
   fmtUsd,
   RiskTag,
-  ScoreRing,
   SourceBadge,
   Spark,
   StatusDot,
@@ -27,7 +26,7 @@ import {
 export function Pipeline() {
   const P = [
     { k: "Dormant", d: "Pump.fun-origin", on: true },
-    { k: "Review", d: "Scored & gated", on: true },
+    { k: "Review", d: "Holder-gated", on: true },
     { k: "Bounties", d: "Funded CTO work", on: true },
     { k: "Proof", d: "Public revival", on: false },
   ];
@@ -84,7 +83,7 @@ export function SweepBar({ sweep }: { sweep: SweepInfo }) {
           {([
             ["found", Math.round(found)],
             ["scanned", fmtNum(sweep.scanned)],
-            ["gate", "score ≥ " + sweep.threshold],
+            ["gate", "review fit"],
           ] as [string, string | number][]).map(([k, v]) => (
             <div key={k} className="lq-soft" style={{ padding: "8px 13px" }}>
               <span
@@ -149,17 +148,9 @@ export function LiveSweep({ data, count = 5 }: { data: SweepCandidate[]; count?:
               </div>
             </div>
             <Spark data={c.spark} w={50} h={18} />
-            <span
-              className="tnum"
-              style={{
-                fontSize: 15,
-                fontWeight: 600,
-                color: c.qual >= 75 ? "var(--green)" : "var(--dim)",
-                width: 26,
-                textAlign: "right",
-              }}
-            >
-              {c.qual}
+            <span className="statuspill">
+              <StatusDot kind={c.status} />
+              {c.status}
             </span>
           </div>
         ))}
@@ -226,7 +217,10 @@ export function CandidateCard({ c, href }: { c: ProtoCandidate; href: string }) 
             <RiskTag level={c.risk} />
           </div>
         </div>
-        <ScoreRing value={c.qual} size={56} stroke={4} label="qualify" />
+        <span className="statuspill">
+          <StatusDot kind={c.qual >= 80 ? "vote" : c.qual >= 70 ? "candidate" : "review"} />
+          Review
+        </span>
       </div>
       <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--dim)", marginTop: 13 }}>{c.blurb}</p>
       <div className="mtiles" style={{ marginTop: 14 }}>
@@ -469,7 +463,7 @@ export function VoteWidget({ initial }: { initial: { revive: number; research: n
         ))}
       </div>
       <div className="mono" style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 12, lineHeight: 1.5 }}>
-        One wallet, one vote. Votes are public and weighted by reputation at settlement.
+        One wallet, one vote. Votes are public, with reputation checks applied at settlement.
       </div>
     </div>
   );
@@ -499,8 +493,8 @@ export function CtaPanel() {
           Every revival is public. Every contributor earns.
         </h2>
         <p style={{ color: "var(--dim)", maxWidth: 520, margin: "12px auto 0", lineHeight: 1.6 }}>
-          Submit a dormant token, fund a bounty, or pick up CTO work. The takeover runs in the open — scored, funded,
-          and proven on-chain.
+          Submit a dormant token, fund a bounty, or pick up CTO work. The takeover runs in the open: requested,
+          reviewed, funded, and proven on-chain.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 26, flexWrap: "wrap" }}>
           <Link className="btn btn-solid" href="/discover">
