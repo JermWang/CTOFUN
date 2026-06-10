@@ -1,6 +1,55 @@
 -- ============================================================================
 -- Add PEPE bounty (1.5 SOL, 14 day deadline)
 -- ============================================================================
+-- First ensure PEPE exists in dead_coins table
+insert into dead_coins (
+  name,
+  ticker,
+  contract_address,
+  chain,
+  market_cap,
+  liquidity,
+  holder_count,
+  telegram_status,
+  website_status,
+  status,
+  meme_score,
+  community_score,
+  safety_score,
+  liquidity_score,
+  lore_score,
+  ticker_score,
+  difficulty_score,
+  contributor_interest,
+  revival_score,
+  reason_died,
+  reason_revive,
+  risk_notes
+) values (
+  'Pepe',
+  'PEPE',
+  'GsR6Z8sxiz9oiLWYAMYDvJu9jf3QwNbCa8xK4Emfh7F3',
+  'solana',
+  9900,
+  2400,
+  1200,
+  'Active',
+  'Up',
+  'candidate',
+  9,
+  7,
+  8,
+  6,
+  8,
+  9,
+  4,
+  7,
+  78,
+  'Market moved on, needs community revival',
+  'Strong community interest, clean contract',
+  'Monitor holder concentration'
+) on conflict (ticker) do nothing;
+
 -- Create revival campaign for PEPE (if not exists)
 insert into revival_campaigns (
   dead_coin_id,
