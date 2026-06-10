@@ -28,6 +28,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.108.0
         version: 2.108.0
+      bs58:
+        specifier: ^6.0.0
+        version: 6.0.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

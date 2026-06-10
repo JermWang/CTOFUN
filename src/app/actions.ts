@@ -7,6 +7,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getOrCreateUser, isAdmin } from "@/lib/auth";
 import { getApplicationsForReview } from "@/lib/data";
 import { MEME_CATEGORIES } from "@/lib/domain";
+import {
+  collectPumpCreatorFees,
+  creatorFeeAutomationStatus,
+  type CollectCreatorFeesResult,
+  type CreatorFeeAutomationStatus,
+} from "@/lib/pumpportal";
 import type { RevivalApplication } from "@/lib/types";
 
 export interface ActionResult<T = undefined> {
@@ -401,6 +407,37 @@ export async function getReviewQueue(token: string | null): Promise<ActionResult
   } catch (e) {
     logActionError("getReviewQueue", e);
     return { ok: false, error: "Could not load the review queue." };
+  }
+}
+
+export async function getCreatorFeeAutomationStatus(
+  token: string | null,
+): Promise<ActionResult<CreatorFeeAutomationStatus>> {
+  try {
+    const auth = await requireAdmin(token);
+    if (!auth.ok) return { ok: false, error: auth.error };
+    return { ok: true, data: creatorFeeAutomationStatus() };
+  } catch (e) {
+    logActionError("getCreatorFeeAutomationStatus", e);
+    return { ok: false, error: "Could not load creator-fee automation status." };
+  }
+}
+
+export async function collectCreatorFeesNow(
+  token: string | null,
+): Promise<ActionResult<CollectCreatorFeesResult>> {
+  try {
+    const auth = await requireAdmin(token);
+    if (!auth.ok) return { ok: false, error: auth.error };
+
+    const admin = createSupabaseAdminClient();
+    const limited = await enforceRateLimit(admin, auth.user.id, "collect_creator_fees", 3, 60 * 60);
+    if (!limited.ok) return { ok: false, error: limited.error };
+
+    return { ok: true, data: await collectPumpCreatorFees() };
+  } catch (e) {
+    logActionError("collectCreatorFeesNow", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Creator-fee collection failed." };
   }
 }
 

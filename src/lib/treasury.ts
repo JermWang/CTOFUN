@@ -12,11 +12,12 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 //   4. On delivery, the bounty SOL is paid to the winning team's wallet.
 //
 // What is automated today vs. an operator (admin) step:
-//   - Fee collection from Pump.fun: NOT automated here. Claimed via Pump.fun's
-//     creator dashboard; the resulting balance is readable on-chain below.
+//   - Fee collection from Pump.fun: automated through PumpPortal's documented
+//     Local collectCreatorFee transaction only when TREASURY_SIGNER_ENABLED and
+//     TREASURY_SIGNER_SECRET are set on the server.
 //   - Bounty creation/funding on Pump.fun: recorded as an ops step on the
-//     application (bounty_pumpfun_url) until Pump.fun exposes a programmatic
-//     bounty API/program we can call. `PUMPFUN_BOUNTY_API` flips this on.
+//     application (bounty_pumpfun_url) until Pump.fun exposes a documented
+//     programmatic bounty API/program we can call.
 //   - Payout to the team: recorded as a signed-transfer tx hash by an admin
 //     (recordRevivalPayout). Automating it means a hot treasury signer, which
 //     is an explicit operator decision — see TREASURY_SIGNER_ENABLED.
@@ -30,9 +31,9 @@ export interface TreasuryConfig {
   wallet: string;
   /** The CTO.fun coordination token mint. */
   ctoMint: string;
-  /** Whether a programmatic Pump.fun bounty integration is wired. */
+  /** Whether a documented programmatic Pump.fun bounty integration is wired. */
   pumpfunBountyApi: boolean;
-  /** Whether automated treasury-signed payouts are enabled (vs. admin-recorded). */
+  /** Whether treasury-signed automation is enabled for server-only flows. */
   signerEnabled: boolean;
 }
 
@@ -49,7 +50,7 @@ export function treasuryConfig(): TreasuryConfig {
   };
 }
 
-function rpcUrl(): string {
+export function treasuryRpcUrl(): string {
   return trimmed(process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL);
 }
 
@@ -60,7 +61,7 @@ function rpcUrl(): string {
  */
 export async function getTreasuryBalanceSol(): Promise<number | null> {
   const { wallet } = treasuryConfig();
-  const url = rpcUrl();
+  const url = treasuryRpcUrl();
   if (!wallet || !url) return null;
   try {
     const connection = new Connection(url, "confirmed");

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import {
+  collectCreatorFeesNow,
+  getCreatorFeeAutomationStatus,
   getReviewQueue,
   reviewRevivalApplication,
   recordRevivalPayout,
@@ -10,6 +12,7 @@ import { WithPrivy, type PrivyAccess } from "@/components/with-privy";
 import { REVIVAL_APPLICATION_STATUS_LABELS } from "@/lib/domain";
 import { fmtSol } from "@/lib/format";
 import type { RevivalApplication } from "@/lib/types";
+import type { CollectCreatorFeesResult, CreatorFeeAutomationStatus } from "@/lib/pumpportal";
 
 const inputStyle: React.CSSProperties = {
   padding: "8px 11px",
@@ -28,19 +31,25 @@ export function AdminReviewPanel() {
 
 function Panel({ privy }: { privy: PrivyAccess }) {
   const [queue, setQueue] = React.useState<RevivalApplication[] | null>(null);
+  const [feeStatus, setFeeStatus] = React.useState<CreatorFeeAutomationStatus | null>(null);
+  const [feeResult, setFeeResult] = React.useState<CollectCreatorFeesResult | null>(null);
   const [error, setError] = React.useState("");
   const started = React.useRef(false);
 
   // Awaits before any setState, so it never updates state synchronously.
   const load = React.useCallback(async () => {
     const token = await privy.getToken();
-    const res = await getReviewQueue(token);
+    const [res, statusRes] = await Promise.all([
+      getReviewQueue(token),
+      getCreatorFeeAutomationStatus(token),
+    ]);
     if (res.ok) {
       setQueue(res.data ?? []);
       setError("");
     } else {
       setError(res.error ?? "Could not load.");
     }
+    if (statusRes.ok) setFeeStatus(statusRes.data ?? null);
   }, [privy]);
 
   React.useEffect(() => {
@@ -65,14 +74,78 @@ function Panel({ privy }: { privy: PrivyAccess }) {
   }
   if (error) return <Notice text={error} />;
   if (queue === null) return <Notice text="Loading review queue…" />;
-  if (queue.length === 0) return <Notice text="No applications yet." />;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <CreatorFeeControl
+        privy={privy}
+        status={feeStatus}
+        result={feeResult}
+        onResult={setFeeResult}
+        onStatus={setFeeStatus}
+      />
+      {queue.length === 0 && <Notice text="No applications yet." />}
       {queue.map((app) => (
         <ReviewRow key={app.id} app={app} privy={privy} onDone={load} />
       ))}
     </div>
+  );
+}
+
+function CreatorFeeControl({
+  privy,
+  status,
+  result,
+  onResult,
+  onStatus,
+}: {
+  privy: PrivyAccess;
+  status: CreatorFeeAutomationStatus | null;
+  result: CollectCreatorFeesResult | null;
+  onResult: (result: CollectCreatorFeesResult | null) => void;
+  onStatus: (status: CreatorFeeAutomationStatus | null) => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const ready = Boolean(status?.configured);
+
+  const collect = async () => {
+    setBusy(true);
+    setError("");
+    onResult(null);
+    const token = await privy.getToken();
+    const res = await collectCreatorFeesNow(token);
+    const nextStatus = await getCreatorFeeAutomationStatus(token);
+    if (nextStatus.ok) onStatus(nextStatus.data ?? null);
+    setBusy(false);
+    if (res.ok && res.data) onResult(res.data);
+    else setError(res.error ?? "Creator-fee collection failed.");
+  };
+
+  return (
+    <section className="lq-soft" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <strong style={{ color: "var(--ink)", fontSize: 14 }}>Creator fees</strong>
+          <div className="mono" style={{ fontSize: 11, color: "var(--faint)", marginTop: 4, wordBreak: "break-all" }}>
+            {status?.publicKey ? status.publicKey : "treasury signer not configured"}
+          </div>
+        </div>
+        <button type="button" className="btn btn-solid btn-sm" disabled={!ready || busy} onClick={collect}>
+          {busy ? "Collecting..." : "Collect creator fees"}
+        </button>
+      </div>
+      {!ready && (
+        <span style={{ fontSize: 12, color: "var(--dim)" }}>
+          Set TREASURY_SIGNER_ENABLED, TREASURY_SIGNER_SECRET, and SOLANA_RPC_URL to enable.
+        </span>
+      )}
+      {error && <span style={{ fontSize: 12, color: "var(--red, #ff5d6c)" }}>{error}</span>}
+      {result && (
+        <a className="mono" style={{ fontSize: 12, color: "var(--green)", wordBreak: "break-all" }} href={result.explorerUrl} target="_blank" rel="noreferrer">
+          {result.signature}
+        </a>
+      )}
+    </section>
   );
 }
 
