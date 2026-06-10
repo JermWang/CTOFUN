@@ -812,12 +812,16 @@ body:has(.splash-home) footer.proto {
   .splash-carousel-shell {
     order: -1;
     justify-self: center;
-    width: fit-content;
-    max-width: calc(100% - 32px);
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.10);
     padding: 16px;
     background: rgba(255,255,255,0.02);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .hero-content {
@@ -872,6 +876,10 @@ body:has(.splash-home) footer.proto {
     --wheel-r: 128px;
     --wheel-scale: 0.6;
     height: calc(378px * var(--wheel-scale) + 58px);
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+    overflow: visible;
   }
 
   .splash-wheel-hint {
@@ -892,10 +900,15 @@ body:has(.splash-home) footer.proto {
     font-size: 32px !important;
   }
 
+  .splash-carousel-shell {
+    max-width: 300px;
+  }
+
   .splash-token-wheel {
     --wheel-r: 112px;
     --wheel-scale: 0.55;
     height: calc(378px * var(--wheel-scale) + 54px);
+    max-width: 280px;
   }
 }
 
