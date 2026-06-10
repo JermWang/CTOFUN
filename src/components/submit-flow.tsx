@@ -1,24 +1,16 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { submitDeadCoin } from "@/app/actions";
+import { CheckCircle2, ExternalLink, Loader2, Search } from "lucide-react";
+import { lookupTokenForSubmission, submitDeadCoin, type SubmissionTokenLookup } from "@/app/actions";
 import { AsciiShader, fmtNum, fmtUsd, SourceBadge } from "@/components/protocol-ui";
 import { WithPrivy, type PrivyAccess } from "@/components/with-privy";
 
-export interface KnownToken {
-  mint: string;
-  sym: string;
-  name: string;
-  ath: number;
-  replies: number;
-  dormant: number;
-  migrated: boolean;
-  last: string;
-  chartUrl?: string;
-  marketCap?: number;
-}
+export type KnownToken = SubmissionTokenLookup;
 
 const CATS = [
   "OG / 4chan",
@@ -53,6 +45,8 @@ const CAT_SLUG: Record<string, string> = {
   Celebrities: "celebs",
   Absurdist: "absurd",
 };
+
+const CAT_BY_SLUG = new Map(Object.entries(CAT_SLUG).map(([label, slug]) => [slug, label]));
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -92,16 +86,137 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
+function LookupStatus({ state }: { state: "idle" | "checking" | "found" | "missing" }) {
+  if (state === "found") {
+    return (
+      <span className="submit-lookup-pill found">
+        <CheckCircle2 size={14} /> Detected
+      </span>
+    );
+  }
+  if (state === "checking") {
+    return (
+      <span className="submit-lookup-pill">
+        <Loader2 size={14} className="submit-spin" /> Detecting
+      </span>
+    );
+  }
+  if (state === "missing") {
+    return (
+      <span className="submit-lookup-pill missing">
+        <Search size={14} /> Check CA
+      </span>
+    );
+  }
+  return (
+    <span className="submit-lookup-pill idle">
+      <Search size={14} /> Auto
+    </span>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="submit-token-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TokenLink({ href, label }: { href?: string; label: string }) {
+  if (!href) return null;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="submit-token-link">
+      {label} <ExternalLink size={12} />
+    </a>
+  );
+}
+
+function DetectedTokenCard({
+  token,
+  state,
+  message,
+}: {
+  token: KnownToken | null;
+  state: "idle" | "checking" | "found" | "missing";
+  message: string;
+}) {
+  if (!token) {
+    return (
+      <div className={"submit-token-empty " + (state === "missing" ? "missing" : "")}>
+        <div className="submit-token-empty-icon">
+          {state === "checking" ? <Loader2 size={18} className="submit-spin" /> : <Search size={18} />}
+        </div>
+        <div>
+          <strong>
+            {state === "missing" ? "Token not detected" : state === "checking" ? "Waiting for token details" : "Drop in a CA"}
+          </strong>
+          <span>{message || "The token name, ticker, artwork, and market details will appear here automatically."}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const description = token.description || "Pump.fun token profile detected from the contract address.";
+  return (
+    <article className="submit-token-card">
+      <div className="submit-token-art">
+        <img src={token.imageUrl} alt={`${token.name} token artwork`} />
+        <div className="submit-token-art-badge">
+          <SourceBadge />
+        </div>
+      </div>
+
+      <div className="submit-token-body">
+        <div className="submit-token-head">
+          <div>
+            <h3>{token.name}</h3>
+            <p>${token.sym}</p>
+          </div>
+          <span className="submit-token-fit">{token.qual > 0 ? `${token.qual} fit` : token.migrated ? "Graduated" : "Detected"}</span>
+        </div>
+
+        <p className="submit-token-desc">{description}</p>
+
+        <div className="submit-token-links">
+          <TokenLink href={token.pumpUrl} label="Pump" />
+          <TokenLink href={token.chartUrl} label="Chart" />
+          <TokenLink href={token.twitterUrl} label="X/Twitter" />
+          <TokenLink href={token.telegramUrl} label="Telegram" />
+          <TokenLink href={token.websiteUrl} label="Website" />
+        </div>
+
+        <div className="submit-token-metrics">
+          <DetailMetric label="Market cap" value={token.marketCap ? fmtUsd(token.marketCap) : "-"} />
+          <DetailMetric label="ATH" value={token.ath ? fmtUsd(token.ath) : "-"} />
+          <DetailMetric label="Dormant" value={token.dormant ? `${token.dormant}d` : "-"} />
+          <DetailMetric label={token.holders != null ? "Holders" : "Replies"} value={token.holders != null ? fmtNum(token.holders) : fmtNum(token.replies)} />
+        </div>
+
+        {(token.reasons.length > 0 || token.categories.length > 0) && (
+          <div className="submit-token-tags">
+            {[...token.categories, ...token.reasons].slice(0, 5).map((item) => (
+              <span key={item}>{CAT_BY_SLUG.get(item) ?? item}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
 export function SubmitFlow({ known }: { known: KnownToken[] }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState("");
   const [submittedName, setSubmittedName] = React.useState("");
   const [detected, setDetected] = React.useState<KnownToken | null>(null);
+  const [lookupState, setLookupState] = React.useState<"idle" | "checking" | "found" | "missing">("idle");
+  const [lookupMessage, setLookupMessage] = React.useState("");
+  const lookupRun = React.useRef(0);
   const [form, setForm] = React.useState({
     address: "",
-    name: "",
-    ticker: "",
     why: "",
     risk: "",
     cats: [] as string[],
@@ -113,36 +228,62 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
     setForm((f) => ({ ...f, [k]: v }));
   };
 
-  const detect = React.useCallback(() => {
-    const needle = form.address.trim().toLowerCase();
-    if (needle.length < 8) return;
-    const hit = known.find((c) => c.mint.toLowerCase() === needle || needle.includes(c.sym.toLowerCase()));
-    if (hit) {
-      setDetected(hit);
-      setForm((f) => ({ ...f, name: hit.name, ticker: hit.sym }));
+  const applyDetectedToken = React.useCallback((token: KnownToken) => {
+    setDetected(token);
+    setLookupState("found");
+    setLookupMessage("");
+    setForm((f) => ({
+      ...f,
+      cats: token.categories
+        .map((category) => CAT_BY_SLUG.get(category) ?? category)
+        .filter((category) => CATS.includes(category))
+        .slice(0, 4),
+    }));
+  }, []);
+
+  const detect = React.useCallback(async () => {
+    const raw = form.address.trim();
+    const needle = raw.toLowerCase();
+    if (needle.length < 32) {
+      setDetected(null);
+      setLookupState("idle");
+      setLookupMessage("");
       return;
     }
-    const fallback: KnownToken = {
-      mint: form.address.trim(),
-      name: "Token revival request",
-      sym: form.address.trim().slice(0, 4).toUpperCase(),
-      ath: 0,
-      replies: 0,
-      dormant: 0,
-      migrated: false,
-      last: "-",
-    };
-    setDetected(fallback);
-    setForm((f) => ({ ...f, name: f.name || fallback.name, ticker: f.ticker || fallback.sym }));
-  }, [form.address, known]);
+
+    const run = ++lookupRun.current;
+    const hit = known.find((c) => c.mint.toLowerCase() === needle);
+    if (hit) {
+      applyDetectedToken(hit);
+      return;
+    }
+
+    setDetected(null);
+    setLookupState("checking");
+    setLookupMessage("Detecting token profile...");
+    const res = await lookupTokenForSubmission(raw);
+    if (run !== lookupRun.current) return;
+    if (res.ok && res.data) {
+      applyDetectedToken(res.data);
+      return;
+    }
+    setLookupState("missing");
+    setLookupMessage(res.error ?? "We couldn't find this token yet. Check the address and try again.");
+  }, [applyDetectedToken, form.address, known]);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => {
+      void detect();
+    }, 450);
+    return () => window.clearTimeout(id);
+  }, [detect]);
 
   const toggleCat = (v: string) =>
     setForm((f) => ({ ...f, cats: f.cats.includes(v) ? f.cats.filter((x) => x !== v) : [...f.cats, v] }));
 
   const canSubmit =
     form.address.trim().length >= 8 &&
-    form.name.trim().length > 0 &&
-    form.ticker.trim().length > 0 &&
+    Boolean(detected) &&
     form.why.trim().length >= 12 &&
     form.ack;
 
@@ -155,8 +296,12 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
       privy.login?.();
       return;
     }
+    if (!detected) {
+      setError("Paste a token address so we can detect the token profile first.");
+      return;
+    }
     if (!canSubmit) {
-      setError("Add the mint, token name, ticker, revival note, and acknowledgement.");
+      setError("Add your revival note and acknowledgement.");
       return;
     }
 
@@ -165,9 +310,9 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
     try {
       const token = await privy.getToken();
       const res = await submitDeadCoin(token, {
-        name: form.name,
-        ticker: form.ticker,
-        contractAddress: form.address,
+        name: detected.name,
+        ticker: detected.sym,
+        contractAddress: detected.mint,
         chain: "solana",
         chartUrl: detected?.chartUrl,
         marketCap: detected?.marketCap ?? detected?.ath,
@@ -182,7 +327,7 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
         setError(res.error ?? "Could not submit this token.");
         return;
       }
-      setSubmittedName(form.name);
+      setSubmittedName(detected.name);
       router.refresh();
     } catch {
       setError("Submission failed. Please try again.");
@@ -195,7 +340,9 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
     setSubmittedName("");
     setDetected(null);
     setError("");
-    setForm({ address: "", name: "", ticker: "", why: "", risk: "", cats: [], ack: false });
+    setLookupState("idle");
+    setLookupMessage("");
+    setForm({ address: "", why: "", risk: "", cats: [], ack: false });
   };
 
   return (
@@ -212,8 +359,8 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
                 Ask the council to revive a token
               </h1>
               <p style={{ color: "var(--dim)", maxWidth: 620, lineHeight: 1.6 }}>
-                Paste a Solana mint, tell us why holders want it back, and submit. Once the CTO token mint is configured,
-                the server verifies your connected wallet holds the required SPL token before accepting the request.
+                Paste a Solana mint, tell us why the community wants it back, and submit it for the revival queue.
+                Token holders are fast-tracked, while everyone else can still send a request for review.
               </p>
             </div>
           </section>
@@ -243,75 +390,44 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
               <div className="detail">
                 <aside className="lq-glass" style={{ padding: 20, alignSelf: "start", order: 2 }}>
                   <div className="eyebrow" style={{ letterSpacing: ".16em", marginBottom: 12 }}>
-                    HOLDER GATE
+                    REQUEST REVIEW
                   </div>
                   <div className="lq-soft" style={{ padding: 14 }}>
-                    <div style={{ fontSize: 14, fontWeight: 650 }}>Token-holder requests</div>
+                    <div style={{ fontSize: 14, fontWeight: 650 }}>How submissions get approved</div>
                     <p style={{ margin: "8px 0 0", color: "var(--dim)", fontSize: 12.5, lineHeight: 1.55 }}>
-                      Submissions require wallet login. When `REVIVAL_REQUEST_TOKEN_MINT` is set, your connected Solana
-                      wallet must hold the configured SPL token.
+                      CTO token holders get their token requests approved automatically. If you do not hold the token yet,
+                      your request goes to review and appears on the site after approval.
                     </p>
                   </div>
-                  {detected && (
-                    <div className="lq-soft" style={{ padding: 14, marginTop: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontSize: 15, fontWeight: 700 }}>{detected.name}</div>
-                          <div className="mono" style={{ fontSize: 11, color: "var(--green)", marginTop: 2 }}>
-                            ${detected.sym}
-                          </div>
-                        </div>
-                        <SourceBadge />
-                      </div>
-                      <div className="mtiles" style={{ marginTop: 12 }}>
-                        {([
-                          ["Dormant", detected.dormant ? detected.dormant + "d" : "-"],
-                          ["ATH", detected.ath ? fmtUsd(detected.ath) : "-"],
-                          ["Replies", fmtNum(detected.replies)],
-                          ["Graduated", detected.migrated ? "Yes" : "No"],
-                        ] as [string, string][]).map(([k, v]) => (
-                          <div key={k} className="lq-soft mtile">
-                            <div className="k">{k}</div>
-                            <div className="v">{v}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <div className="lq-soft" style={{ padding: 14, marginTop: 12 }}>
+                    <div style={{ fontSize: 14, fontWeight: 650 }}>What you still add</div>
+                    <p style={{ margin: "8px 0 0", color: "var(--dim)", fontSize: 12.5, lineHeight: 1.55 }}>
+                      We detect the token profile from the address. You add the revival case, social context, and any
+                      safety notes the council should know.
+                    </p>
+                  </div>
                 </aside>
 
                 <div className="lq-glass" style={{ padding: 22, order: 1 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                    <Field label="Token mint" hint="Paste the Solana mint for the token holders want revived.">
-                      <div style={{ display: "flex", gap: 8 }}>
+                    <Field label="Token contract address" hint="Paste the CA. We'll detect the token profile and artwork automatically.">
+                      <div className="submit-ca-row">
                         <input
                           style={inputStyle}
                           value={form.address}
                           onChange={(e) => {
                             set("address", e.target.value);
                             setDetected(null);
+                            setLookupState(e.target.value.trim() ? "checking" : "idle");
+                            setLookupMessage(e.target.value.trim() ? "Waiting for a full token address..." : "");
                           }}
                           placeholder="Solana mint address"
                         />
-                        <button
-                          className="btn btn-outline"
-                          style={{ flexShrink: 0 }}
-                          onClick={detect}
-                          disabled={form.address.trim().length < 8}
-                        >
-                          Lookup
-                        </button>
+                        <LookupStatus state={lookupState} />
                       </div>
                     </Field>
 
-                    <div className="grid g2" style={{ gap: 14 }}>
-                      <Field label="Token name">
-                        <input style={inputStyle} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Token name" />
-                      </Field>
-                      <Field label="Ticker">
-                        <input style={inputStyle} value={form.ticker} onChange={(e) => set("ticker", e.target.value)} placeholder="TICKER" />
-                      </Field>
-                    </div>
+                    <DetectedTokenCard token={detected} state={lookupState} message={lookupMessage} />
 
                     <Field label="Why should holders revive it?">
                       <textarea
@@ -322,11 +438,11 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
                       />
                     </Field>
 
-                    <Field label="Risk notes" hint="Optional, but useful: flag thin liquidity, holder concentration, or suspicious history.">
+                    <Field label="Social context and risk notes" hint="Keep Twitter/X, Telegram, holder group, or safety context here. Optional, but useful.">
                       <textarea
                         value={form.risk}
                         onChange={(e) => set("risk", e.target.value)}
-                        placeholder="Optional safety context"
+                        placeholder="Links, X/Twitter context, community notes, thin liquidity, holder concentration, or suspicious history."
                         style={{ ...inputStyle, minHeight: 76, padding: "12px 14px", resize: "vertical", lineHeight: 1.5 }}
                       />
                     </Field>
@@ -368,7 +484,7 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
                       />
                       <span style={{ fontSize: 12.5, color: "var(--dim)", lineHeight: 1.5 }}>
                         I understand this is a community takeover request, not financial advice, not affiliated with the
-                        original developer, and not a promise of price recovery.
+                        original launch team, and not a promise of price recovery.
                       </span>
                     </label>
 

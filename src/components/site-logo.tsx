@@ -1,28 +1,21 @@
 import Image from "next/image";
-import * as React from "react";
 import textLogo from "../../public/text-logo.png";
 import whiteTextLogo from "../../public/white-text-logo.png";
 
 // ============================================================================
-// Official CTO.fun wordmark. Two PNG variants live in /public:
+// Official CTO.fun wordmark. Renders the RAW PNG from /public as-is — no
+// cropping, no clip box, no border. The image is sized by height and keeps its
+// native aspect ratio, so nothing is ever cut off.
 //   text-logo.png       - dark ".fun" text, for light backgrounds
 //   white-text-logo.png - white ".fun" text, for dark backgrounds
-// The files include whitespace around the artwork, so this component crops the
-// rendered box to the actual wordmark bounds before scaling.
 // ============================================================================
 
 const SOURCE_WIDTH = 672;
 const SOURCE_HEIGHT = 328;
-const LOGO_CROP = {
-  left: 25,
-  top: 89,
-  width: 625,
-  height: 140,
-};
 
 export function SiteLogo({
   variant = "dark",
-  height = 28,
+  height = 32,
   className,
   priority,
 }: {
@@ -32,36 +25,18 @@ export function SiteLogo({
   priority?: boolean;
 }) {
   const src = variant === "light" ? whiteTextLogo : textLogo;
-  const scale = height / LOGO_CROP.height;
-  const renderedWidth = Math.round(LOGO_CROP.width * scale);
-  const renderedSourceHeight = SOURCE_HEIGHT * scale;
+  const width = Math.round((SOURCE_WIDTH / SOURCE_HEIGHT) * height);
 
   return (
-    <span
+    <Image
+      src={src}
+      alt="CTO.fun"
+      width={width}
+      height={height}
+      priority={priority}
+      sizes={`${width}px`}
       className={className}
-      style={{
-        display: "block",
-        height,
-        overflow: "hidden",
-        position: "relative",
-        width: renderedWidth,
-      }}
-    >
-      <Image
-        src={src}
-        alt="CTO.fun"
-        width={SOURCE_WIDTH}
-        height={SOURCE_HEIGHT}
-        preload={priority}
-        sizes={`${renderedWidth}px`}
-        style={{
-          display: "block",
-          height: renderedSourceHeight,
-          maxWidth: "none",
-          transform: `translate(${-LOGO_CROP.left * scale}px, ${-LOGO_CROP.top * scale}px)`,
-          width: "auto",
-        }}
-      />
-    </span>
+      style={{ height, width: "auto", display: "block", objectFit: "contain" }}
+    />
   );
 }

@@ -58,8 +58,8 @@ export function GraveyardBoard({ graves }: { graves: ProtoGrave[] }) {
               borderRadius: 999,
               cursor: "pointer",
               fontFamily: "var(--sans)",
-              border: "1px solid " + (tab === k ? "rgba(0,229,153,.4)" : "rgba(255,255,255,.1)"),
-              background: tab === k ? "rgba(0,229,153,.1)" : "rgba(255,255,255,.02)",
+              border: "1px solid " + (tab === k ? "rgba(4, 255, 0,.4)" : "rgba(255,255,255,.1)"),
+              background: tab === k ? "rgba(4, 255, 0,.1)" : "rgba(255,255,255,.02)",
               color: tab === k ? "var(--green)" : "var(--dim)",
             }}
           >

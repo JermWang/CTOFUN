@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AsciiShader } from "@/components/protocol-ui";
 import { Pipeline } from "@/components/protocol-blocks";
 import { SplashTokenCarousel } from "@/components/splash-token-carousel";
-import { getDiscoveredDeadTokens, getGlobalMetrics } from "@/lib/data";
+import { getGlobalMetrics, getStoredDiscoveredDeadTokens } from "@/lib/data";
 import { fmtNum, fmtUsd } from "@/lib/format";
 import { toProtoCandidate } from "@/lib/proto-adapters";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const [globalMetrics, discovered] = await Promise.all([
     getGlobalMetrics(),
-    getDiscoveredDeadTokens(),
+    getStoredDiscoveredDeadTokens(60),
   ]);
 
   // Hand the carousel a spare pool (not just the 5 visible): if a token's

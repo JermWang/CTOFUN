@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { PrivyProvider } from "@privy-io/react-auth";
+import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 
 /**
  * Context flag so UI can tell whether Privy is actually configured. When the
@@ -32,14 +33,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
         config={{
           appearance: {
             theme: "dark",
-            accentColor: "#2dd47e",
+            accentColor: "#04ff00",
             logo: undefined,
             walletChainType: "solana-only",
+            walletList: ["detected_solana_wallets", "phantom", "solflare", "backpack", "jupiter"],
           },
-          loginMethods: ["email", "wallet", "twitter"],
-          embeddedWallets: {
-            // Create a Solana embedded wallet for users who log in without one.
-            solana: { createOnLogin: "users-without-wallets" },
+          loginMethods: ["wallet"],
+          externalWallets: {
+            walletConnect: { enabled: false },
+            solana: {
+              connectors: toSolanaWalletConnectors({ shouldAutoConnect: false }),
+            },
           },
         }}
       >

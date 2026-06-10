@@ -1,0 +1,24 @@
+{
+  "name": "ctofun-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "On-brand Remotion motion-graphics onboarding explainer for CTO.fun",
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render CtoFunOnboarding out/cto-fun-onboarding.mp4",
+    "still": "remotion still CtoFunOnboarding out/frame.png --frame=210",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.366",
+    "@remotion/google-fonts": "4.0.366",
+    "ctofun": "file:..",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.366"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

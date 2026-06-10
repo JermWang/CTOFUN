@@ -5,8 +5,9 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getOrCreateUser, isAdmin } from "@/lib/auth";
-import { getApplicationsForReview, getDiscoveredTokensForReview } from "@/lib/data";
+import { getApplicationsForReview, getDiscoveredTokensForReview, getStoredDiscoveredTokenByMint } from "@/lib/data";
 import { MEME_CATEGORIES } from "@/lib/domain";
+import { lookupPumpTokenByMint } from "@/lib/dead-token-sweeper";
 import {
   collectPumpCreatorFees,
   creatorFeeAutomationStatus,
@@ -20,6 +21,31 @@ export interface ActionResult<T = undefined> {
   ok: boolean;
   error?: string;
   data?: T;
+}
+
+export interface SubmissionTokenLookup {
+  mint: string;
+  sym: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  pumpUrl: string;
+  chartUrl: string;
+  websiteUrl: string;
+  twitterUrl: string;
+  telegramUrl: string;
+  ath: number;
+  marketCap: number;
+  liquidityUsd: number | null;
+  volume24hUsd: number | null;
+  holders: number | null;
+  replies: number;
+  dormant: number;
+  migrated: boolean;
+  last: string;
+  qual: number;
+  reasons: string[];
+  categories: string[];
 }
 
 const MEME_CATEGORY_SLUGS = new Set(MEME_CATEGORIES.map((c) => c.slug));
@@ -108,6 +134,90 @@ function minSubmissionTokenAmount(): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+function dateLabel(value: string): string {
+  const time = value ? new Date(value).getTime() : 0;
+  if (!Number.isFinite(time) || time <= 0) return "-";
+  return new Date(time).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function daysSinceIso(value: string): number {
+  const time = value ? new Date(value).getTime() : 0;
+  if (!Number.isFinite(time) || time <= 0) return 0;
+  return Math.max(0, Math.floor((Date.now() - time) / 86_400_000));
+}
+
+export async function lookupTokenForSubmission(mintInput: string): Promise<ActionResult<SubmissionTokenLookup>> {
+  const mint = cleanSolanaAddress(mintInput);
+  if (!mint) return { ok: false, error: "Paste a valid Solana token address." };
+
+  try {
+    const discovered = await getStoredDiscoveredTokenByMint(mint);
+    if (discovered) {
+      return {
+        ok: true,
+        data: {
+          mint: discovered.mint,
+          sym: discovered.symbol,
+          name: discovered.name,
+          description: cleanText(discovered.description, 400),
+          imageUrl: discovered.imageUrl,
+          pumpUrl: discovered.pumpUrl,
+          chartUrl: discovered.chartUrl,
+          websiteUrl: discovered.websiteUrl,
+          twitterUrl: discovered.twitterUrl,
+          telegramUrl: discovered.telegramUrl,
+          ath: discovered.athMarketCapUsd ?? discovered.marketCapUsd,
+          marketCap: discovered.marketCapUsd,
+          liquidityUsd: discovered.liquidityUsd,
+          volume24hUsd: discovered.volume24hUsd,
+          holders: discovered.holderCount,
+          replies: discovered.replyCount,
+          dormant: discovered.dormantDays,
+          migrated: discovered.migrated,
+          last: dateLabel(discovered.lastTradeAt),
+          qual: discovered.qualificationScore,
+          reasons: discovered.qualificationReasons.slice(0, 4),
+          categories: discovered.categories.slice(0, 6),
+        },
+      };
+    }
+
+    const pump = await lookupPumpTokenByMint(mint);
+    if (!pump) return { ok: false, error: "We couldn't find this token yet. Check the address and try again." };
+
+    return {
+      ok: true,
+      data: {
+        mint: pump.mint,
+        sym: pump.symbol,
+        name: pump.name,
+        description: cleanText(pump.description, 400),
+        imageUrl: pump.imageUrl,
+        pumpUrl: pump.pumpUrl,
+        chartUrl: pump.chartUrl,
+        websiteUrl: pump.websiteUrl,
+        twitterUrl: pump.twitterUrl,
+        telegramUrl: pump.telegramUrl,
+        ath: pump.athMarketCapUsd ?? pump.marketCapUsd,
+        marketCap: pump.marketCapUsd,
+        liquidityUsd: null,
+        volume24hUsd: null,
+        holders: null,
+        replies: pump.replyCount,
+        dormant: daysSinceIso(pump.lastTradeAt),
+        migrated: pump.migrated,
+        last: dateLabel(pump.lastTradeAt),
+        qual: 0,
+        reasons: [],
+        categories: [],
+      },
+    };
+  } catch (e) {
+    logActionError("lookupTokenForSubmission", e);
+    return { ok: false, error: "Token lookup is taking too long. You can try again in a moment." };
+  }
+}
+
 async function verifySubmissionTokenHolding(walletAddress: string | null): Promise<ActionResult> {
   const mint = submissionTokenMint();
   if (!mint) return { ok: true };
@@ -139,6 +249,31 @@ async function verifySubmissionTokenHolding(walletAddress: string | null): Promi
     logActionError("verifySubmissionTokenHolding", e);
     return { ok: false, error: "Could not verify your CTO token balance. Please try again." };
   }
+}
+
+async function hasSubmissionTokenHolding(walletAddress: string | null): Promise<boolean> {
+  const mint = submissionTokenMint();
+  const rpcUrl = solanaRpcUrl();
+  if (!mint || !walletAddress || !rpcUrl) return false;
+
+  try {
+    const owner = new PublicKey(walletAddress);
+    const tokenMint = new PublicKey(mint);
+    const connection = new Connection(rpcUrl, "confirmed");
+    const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: tokenMint });
+    const required = minSubmissionTokenAmount();
+
+    for (const account of accounts.value) {
+      // Parsed SPL token shape from getParsedTokenAccountsByOwner.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tokenAmount = (account.account.data as any)?.parsed?.info?.tokenAmount;
+      const uiAmount = Number(tokenAmount?.uiAmountString ?? tokenAmount?.uiAmount ?? 0);
+      if (Number.isFinite(uiAmount) && uiAmount >= required) return true;
+    }
+  } catch (e) {
+    logActionError("hasSubmissionTokenHolding", e);
+  }
+  return false;
 }
 
 async function enforceRateLimit(
@@ -209,8 +344,7 @@ export async function submitDeadCoin(
     if (!reasonDied || !reasonRevive) {
       return { ok: false, error: "Revival story fields are required." };
     }
-    const holderGate = await verifySubmissionTokenHolding(user.wallet);
-    if (!holderGate.ok) return { ok: false, error: holderGate.error };
+    const tokenHolder = await hasSubmissionTokenHolding(user.wallet);
 
     const admin = createSupabaseAdminClient();
     const limited = await enforceRateLimit(admin, user.id, "submit_dead_coin", 5, 60 * 60);
@@ -228,7 +362,7 @@ export async function submitDeadCoin(
         liquidity: cleanOptionalNumber(input.liquidity),
         holder_count: cleanOptionalNumber(input.holderCount),
         old_socials: cleanText(input.oldSocials) ? { raw: cleanText(input.oldSocials) } : {},
-        status: "newly_submitted",
+        status: tokenHolder ? "candidate" : "under_review",
         reason_died: reasonDied,
         reason_revive: reasonRevive,
         risk_notes: cleanText(input.riskNotes) || null,
@@ -454,6 +588,9 @@ export async function setRevivalTarget(
     if (!mint) return { ok: false, error: "Missing token mint." };
 
     const admin = createSupabaseAdminClient();
+    const limited = await enforceRateLimit(admin, auth.user.id, "admin_set_revival_target", 60, 60 * 60);
+    if (!limited.ok) return { ok: false, error: limited.error };
+
     const { data: row, error: readError } = await admin
       .from("discovered_dead_tokens")
       .select("mint,status")
@@ -621,6 +758,9 @@ export async function reviewRevivalApplication(
     if (!auth.ok) return { ok: false, error: auth.error };
 
     const admin = createSupabaseAdminClient();
+    const limited = await enforceRateLimit(admin, auth.user.id, "admin_review_revival_application", 30, 60 * 60);
+    if (!limited.ok) return { ok: false, error: limited.error };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patch: Record<string, any> = {
       reviewed_by: auth.user.id,
@@ -730,6 +870,9 @@ export async function recordRevivalPayout(
     if (!amount) return { ok: false, error: "Enter the SOL amount paid." };
 
     const admin = createSupabaseAdminClient();
+    const limited = await enforceRateLimit(admin, auth.user.id, "admin_record_revival_payout", 20, 60 * 60);
+    if (!limited.ok) return { ok: false, error: limited.error };
+
     const { error } = await admin
       .from("revival_applications")
       .update({

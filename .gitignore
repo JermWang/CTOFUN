@@ -42,3 +42,8 @@ next-env.d.ts
 
 # on-the-fly sweep bundle output
 .sweep-tmp-*/
+
+# remotion video project (isolated; deps + renders stay local)
+/video/node_modules
+/video/out
+/video/.remotion

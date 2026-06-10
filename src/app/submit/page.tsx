@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SubmitFlow, type KnownToken } from "@/components/submit-flow";
-import { getDiscoveredDeadTokens } from "@/lib/data";
+import { getStoredDiscoveredDeadTokens } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -11,18 +11,30 @@ export const metadata: Metadata = {
 };
 
 export default async function SubmitPage() {
-  const tokens = await getDiscoveredDeadTokens();
-  const known: KnownToken[] = tokens.slice(0, 40).map((t) => ({
+  const tokens = await getStoredDiscoveredDeadTokens(40);
+  const known: KnownToken[] = tokens.map((t) => ({
     mint: t.mint,
     sym: t.symbol,
     name: t.name,
+    description: t.description,
+    imageUrl: t.imageUrl,
+    pumpUrl: t.pumpUrl,
+    chartUrl: t.chartUrl,
+    websiteUrl: t.websiteUrl,
+    twitterUrl: t.twitterUrl,
+    telegramUrl: t.telegramUrl,
     ath: t.athMarketCapUsd ?? t.marketCapUsd,
+    liquidityUsd: t.liquidityUsd,
+    volume24hUsd: t.volume24hUsd,
+    holders: t.holderCount,
     replies: t.replyCount,
     dormant: t.dormantDays,
     migrated: t.migrated,
     last: t.lastTradeAt ? new Date(t.lastTradeAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "-",
-    chartUrl: t.chartUrl,
     marketCap: t.marketCapUsd,
+    qual: t.qualificationScore,
+    reasons: t.qualificationReasons.slice(0, 4),
+    categories: t.categories,
   }));
 
   return <SubmitFlow known={known} />;

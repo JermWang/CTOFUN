@@ -68,7 +68,33 @@ export function AsciiShader({
   fontSize?: number;
 }) {
   const ref = useRef<HTMLPreElement>(null);
+  const [grid, setGrid] = useState({ cols, rows });
+
   useEffect(() => {
+    const node = ref.current;
+    const parent = node?.parentElement;
+    if (!parent) return;
+
+    const lineHeight = fontSize + 1;
+    const charWidth = Math.max(fontSize * 0.62, 1);
+    const measure = () => {
+      const rect = parent.getBoundingClientRect();
+      const next = {
+        cols: Math.max(cols, Math.ceil(rect.width / charWidth) + 16),
+        rows: Math.max(rows, Math.ceil(rect.height / lineHeight) + 6),
+      };
+      setGrid((prev) => (prev.cols === next.cols && prev.rows === next.rows ? prev : next));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [cols, rows, fontSize]);
+
+  useEffect(() => {
+    const renderCols = grid.cols;
+    const renderRows = grid.rows;
     const ramp = "   ..::--==++**##";
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0;
@@ -86,10 +112,10 @@ export function AsciiShader({
       t += speed;
 
       let out = "";
-      for (let y = 0; y < rows; y++) {
-        const ny = (y / rows) * 2 - 1;
-        for (let x = 0; x < cols; x++) {
-          const nx = (x / cols) * 2 - 1;
+      for (let y = 0; y < renderRows; y++) {
+        const ny = (y / renderRows) * 2 - 1;
+        for (let x = 0; x < renderCols; x++) {
+          const nx = (x / renderCols) * 2 - 1;
           const rot = t * 0.08;
           const rx = nx * Math.cos(rot) - ny * Math.sin(rot);
           const ry = nx * Math.sin(rot) + ny * Math.cos(rot);
@@ -110,7 +136,7 @@ export function AsciiShader({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [cols, rows]);
+  }, [grid.cols, grid.rows]);
 
   const masks: Record<ShaderMask, string> = {
     hero: "linear-gradient(100deg, transparent 6%, rgba(0,0,0,.26) 32%, #000 60%), radial-gradient(120% 120% at 80% 50%, #000 55%, transparent 100%)",
@@ -263,7 +289,7 @@ export function StatusDot({ kind = "idle" }: { kind?: string }) {
 
 export function RiskTag({ level }: { level: string }) {
   const m: Record<string, [string, string, string]> = {
-    Low: ["var(--green)", "rgba(0,191,122,.32)", "rgba(0,191,122,.08)"],
+    Low: ["var(--green)", "rgba(4, 255, 0,.32)", "rgba(4, 255, 0,.08)"],
     Med: ["var(--amber)", "rgba(196,126,23,.32)", "rgba(196,126,23,.08)"],
     High: ["var(--red)", "rgba(220,51,76,.32)", "rgba(220,51,76,.08)"],
   };

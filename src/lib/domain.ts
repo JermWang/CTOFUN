@@ -151,6 +151,7 @@ export interface MemeCategoryMeta {
 }
 
 export const MEME_CATEGORIES: MemeCategoryMeta[] = [
+  { slug: "og2024", label: "OG 2024", emoji: "24" },
   { slug: "og", label: "4chan / OG", emoji: "🗿" },
   { slug: "classic", label: "Classic", emoji: "📜" },
   { slug: "animals", label: "Animals", emoji: "🐾" },

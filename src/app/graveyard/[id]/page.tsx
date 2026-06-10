@@ -89,7 +89,7 @@ export default async function RevivalDetailPage({ params }: { params: Promise<{ 
           {/* left column */}
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             {/* risk — first class */}
-            <div className="lq-glass" style={{ padding: 18, borderColor: "rgba(0,229,153,.22)" }}>
+            <div className="lq-glass" style={{ padding: 18, borderColor: "rgba(4, 255, 0,.22)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span className="dot dot-live" />
                 <span className="eyebrow" style={{ letterSpacing: ".16em" }}>

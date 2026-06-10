@@ -9,9 +9,13 @@ import "server-only";
 import { createSupabaseReadClient } from "@/lib/supabase/server";
 import {
   findDeadTokenCandidates,
+  findPriorityOg2024Candidates,
+  lookupPumpTokenByMint,
   minDeadTokenMarketCapUsd,
   type DiscoveredDeadToken,
+  type PumpTokenLookup,
 } from "@/lib/dead-token-sweeper";
+import { applyPriorityOg2024Metadata, isPriorityOg2024Mint, priorityOg2024Rank } from "@/lib/priority-tokens";
 import type {
   DeadCoin,
   RevivalCampaign,
@@ -54,7 +58,7 @@ const EMPTY_GLOBAL_METRICS = {
   totalTokenRecycled: 0,
 };
 
-const AVATAR_PALETTE = ["#2dd47e", "#9b7bff", "#f5b54a", "#ff5d6c", "#4ab5f5"];
+const AVATAR_PALETTE = ["#04ff00", "#9b7bff", "#f5b54a", "#ff5d6c", "#4ab5f5"];
 function avatarColor(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
@@ -241,7 +245,7 @@ export async function getDeadCoinById(id: string): Promise<DeadCoin | undefined>
 // ----------------------------------------------------------------------------
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
-  return {
+  return applyPriorityOg2024Metadata({
     id: row.mint,
     source: "pump.fun",
     mint: row.mint,
@@ -285,7 +289,7 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
     revivalTargetedAt: row.revival_targeted_at ?? "",
     revivalTargetNotes: row.revival_target_notes ?? "",
     sweptAt: row.swept_at ?? "",
-  };
+  });
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -297,7 +301,7 @@ function isDisplayableDeadToken(token: DiscoveredDeadToken): boolean {
   return (
     typeof token.imageUrl === "string" &&
     token.imageUrl.trim().length > 0 &&
-    token.marketCapUsd >= minDeadTokenMarketCapUsd()
+    (isPriorityOg2024Mint(token.mint) || token.marketCapUsd >= minDeadTokenMarketCapUsd())
   );
 }
 
@@ -321,7 +325,6 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
         storedTokens.push(
           ...data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken).slice(0, DISCOVERED_TOKEN_TARGET),
         );
-        if (storedTokens.length >= DISCOVERED_TOKEN_TARGET) return sortDiscoveredTokens(storedTokens);
       }
     } catch {
       // Fall through to live discovery. The page should still render if the DB
@@ -332,6 +335,11 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
   try {
     const byMint = new Map<string, DiscoveredDeadToken>();
     for (const token of storedTokens) byMint.set(token.mint, token);
+    for (const token of (await findPriorityOg2024Candidates()).filter(isDisplayableDeadToken)) {
+      byMint.set(token.mint, token);
+    }
+    if (byMint.size > 0) return sortDiscoveredTokens([...byMint.values()]).slice(0, DISCOVERED_TOKEN_TARGET);
+
     for (const token of (await findDeadTokenCandidates(DISCOVERED_TOKEN_TARGET)).filter(isDisplayableDeadToken)) {
       if (!byMint.has(token.mint)) byMint.set(token.mint, token);
       if (byMint.size >= DISCOVERED_TOKEN_TARGET) break;
@@ -342,8 +350,32 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
   }
 }
 
+export async function getStoredDiscoveredDeadTokens(limit = 40): Promise<DiscoveredDeadToken[]> {
+  if (!isConfigured()) return [];
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("discovered_dead_tokens")
+      .select("*")
+      .in("status", ["candidate", "watchlist", "targeted"])
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .gte("market_cap_usd", minDeadTokenMarketCapUsd())
+      .order("qualification_score", { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return sortDiscoveredTokens(data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken)).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 function sortDiscoveredTokens(tokens: DiscoveredDeadToken[]): DiscoveredDeadToken[] {
   return [...tokens].sort((a, b) => {
+    if (isPriorityOg2024Mint(a.mint) !== isPriorityOg2024Mint(b.mint)) return isPriorityOg2024Mint(a.mint) ? -1 : 1;
+    if (isPriorityOg2024Mint(a.mint) && isPriorityOg2024Mint(b.mint)) {
+      return priorityOg2024Rank(a.mint) - priorityOg2024Rank(b.mint);
+    }
     if (a.status === "targeted" && b.status !== "targeted") return -1;
     if (a.status !== "targeted" && b.status === "targeted") return 1;
     if (a.isGem !== b.isGem) return a.isGem ? -1 : 1;
@@ -366,11 +398,80 @@ export async function getDiscoveredTokenByMint(mint: string): Promise<Discovered
       // Fall through to the live sweep below.
     }
   }
+  // Direct pump.fun lookup by mint: resolves ANY valid token (with its real
+  // artwork), not just ones the dead-token sweep happened to surface. This is
+  // what lets an arbitrary mint's /revive page render the token + image.
   try {
-    return (await findDeadTokenCandidates(DISCOVERED_TOKEN_TARGET)).find((t) => t.mint === mint);
+    const pump = await lookupPumpTokenByMint(mint);
+    return pump ? pumpLookupToDiscovered(pump) : undefined;
   } catch {
     return undefined;
   }
+}
+
+// Map a bare pump.fun lookup onto the DiscoveredDeadToken shape the UI renders.
+// Fields we don't have from a single-coin lookup default to neutral values.
+function pumpLookupToDiscovered(p: PumpTokenLookup): DiscoveredDeadToken {
+  const dormantDays = p.lastTradeAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(p.lastTradeAt).getTime()) / 86_400_000))
+    : 0;
+  return {
+    id: p.mint,
+    source: "pump.fun",
+    mint: p.mint,
+    holderCount: null,
+    lifetimeVolumeUsd: null,
+    lifetimeVolumeSource: "",
+    isGem: false,
+    gemScore: 0,
+    gemReasons: [],
+    name: p.name,
+    symbol: p.symbol,
+    description: p.description,
+    imageUrl: p.imageUrl,
+    pumpUrl: p.pumpUrl,
+    chartUrl: p.chartUrl,
+    websiteUrl: p.websiteUrl,
+    twitterUrl: p.twitterUrl,
+    telegramUrl: p.telegramUrl,
+    createdAt: p.createdAt,
+    lastTradeAt: p.lastTradeAt,
+    dormantDays,
+    replyCount: p.replyCount,
+    migrated: p.migrated,
+    raydiumPool: p.raydiumPool,
+    marketCapUsd: p.marketCapUsd,
+    liquidityUsd: null,
+    volume24hUsd: null,
+    historicalVolumeUsd: null,
+    athMarketCapUsd: p.athMarketCapUsd,
+    athMarketCapAt: p.athMarketCapAt,
+    categories: [],
+    categoryScores: {},
+    categoryConfidence: 0,
+    discoverySignals: [],
+    qualificationScore: 0,
+    revivalScore: 0,
+    qualificationReasons: [],
+    status: "candidate",
+    sweptAt: "",
+  };
+}
+
+export async function getStoredDiscoveredTokenByMint(mint: string): Promise<DiscoveredDeadToken | undefined> {
+  if (!mint || !isConfigured()) return undefined;
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("discovered_dead_tokens")
+      .select("*")
+      .eq("mint", mint)
+      .maybeSingle();
+    if (!error && data) return mapDiscoveredDeadToken(data);
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 /** Admin target queue: discovered tokens that can be marked as revival targets. */

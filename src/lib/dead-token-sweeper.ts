@@ -1,5 +1,11 @@
 import "server-only";
 import { MEME_CATEGORY_LABELS } from "@/lib/domain";
+import {
+  applyPriorityOg2024Metadata,
+  isPriorityOg2024Mint,
+  priorityOg2024Rank,
+  PRIORITY_OG_2024_MINTS,
+} from "@/lib/priority-tokens";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { safeHttpUrl } from "@/lib/utils";
 
@@ -75,6 +81,27 @@ interface PumpCoin {
   hidden?: boolean;
 }
 
+export interface PumpTokenLookup {
+  mint: string;
+  name: string;
+  symbol: string;
+  description: string;
+  imageUrl: string;
+  pumpUrl: string;
+  chartUrl: string;
+  websiteUrl: string;
+  twitterUrl: string;
+  telegramUrl: string;
+  createdAt: string;
+  lastTradeAt: string;
+  replyCount: number;
+  migrated: boolean;
+  raydiumPool: string;
+  marketCapUsd: number;
+  athMarketCapUsd: number | null;
+  athMarketCapAt: string;
+}
+
 interface DexPair {
   liquidity?: { usd?: number };
   volume?: { h24?: number };
@@ -86,6 +113,7 @@ interface CategoryRule {
 }
 
 const CATEGORY_RULES: CategoryRule[] = [
+  { slug: "og2024", terms: ["og 2024", "2024 og", "pump.fun 2024", "pumpfun 2024"] },
   { slug: "dogs", terms: ["dog", "doge", "shib", "inu", "wif", "bonk", "floki", "cheems", "kabosu", "doggo"] },
   { slug: "cats", terms: ["cat", "kitty", "kitten", "mew", "michi", "popcat", "neko"] },
   { slug: "frogs", terms: ["frog", "pepe", "pepega", "fwog", "kermit"] },
@@ -626,6 +654,69 @@ async function fetchPumpCoins(limit: number): Promise<PumpCoin[]> {
   return [...byMint.values()];
 }
 
+async function fetchPumpCoinByMint(mint: string): Promise<PumpCoin | null> {
+  try {
+    return await fetchJson<PumpCoin>(`${PUMPFUN_COINS_ENDPOINT}/${encodeURIComponent(mint)}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function findPriorityOg2024Candidates(): Promise<DiscoveredDeadToken[]> {
+  const coins = (
+    await Promise.all(PRIORITY_OG_2024_MINTS.map((mint) => fetchPumpCoinByMint(mint)))
+  ).filter((coin): coin is PumpCoin => Boolean(coin?.mint));
+  if (coins.length === 0) return [];
+
+  const mints = coins.map((coin) => coin.mint!).filter(Boolean);
+  const [dex, holders] = await Promise.all([enrichWithDexScreener(mints), enrichWithHolderCounts(mints)]);
+  return coins
+    .map((coin) =>
+      mapPumpCandidate(
+        coin,
+        coin.mint ? dex.get(coin.mint) : undefined,
+        coin.mint ? holders.get(coin.mint) ?? null : null,
+      ),
+    )
+    .filter((coin): coin is DiscoveredDeadToken => Boolean(coin))
+    .sort((a, b) => priorityOg2024Rank(a.mint) - priorityOg2024Rank(b.mint));
+}
+
+export async function lookupPumpTokenByMint(mint: string): Promise<PumpTokenLookup | null> {
+  const cleanMint = mint.trim();
+  if (!cleanMint) return null;
+
+  try {
+    const coin = await fetchJson<PumpCoin>(`${PUMPFUN_COINS_ENDPOINT}/${encodeURIComponent(cleanMint)}`);
+    const imageUrl = safeHttpUrl(coin.image_uri);
+    const tokenMint = coin.mint?.trim() || cleanMint;
+    if (!tokenMint || !imageUrl) return null;
+
+    return {
+      mint: tokenMint,
+      name: coin.name?.trim() || "Unknown token",
+      symbol: coin.symbol?.trim() || tokenMint.slice(0, 4).toUpperCase(),
+      description: coin.description?.trim() || "",
+      imageUrl,
+      pumpUrl: pumpUrl(tokenMint),
+      chartUrl: chartUrl(tokenMint),
+      websiteUrl: safeHttpUrl(coin.website),
+      twitterUrl: safeHttpUrl(coin.twitter),
+      telegramUrl: safeHttpUrl(coin.telegram),
+      createdAt: toIso(coin.created_timestamp),
+      lastTradeAt: toIso(coin.last_trade_timestamp),
+      replyCount: coin.reply_count ?? 0,
+      migrated: Boolean(coin.complete || coin.raydium_pool || coin.pool_address),
+      raydiumPool: coin.raydium_pool ?? coin.pool_address ?? "",
+      marketCapUsd: Number(coin.usd_market_cap ?? coin.market_cap ?? 0),
+      athMarketCapUsd: plausibleAthUsd(coin) || null,
+      athMarketCapAt: toIso(coin.ath_market_cap_timestamp),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Holder-count enrichment via Helius DAS getTokenAccounts. One page of up to
 // 1000 accounts per mint: if the page is full we know holders >= 1000, which
@@ -723,10 +814,11 @@ function mapPumpCandidate(
 ): DiscoveredDeadToken | null {
   const mint = coin.mint?.trim();
   if (!mint) return null;
+  const priorityOg2024 = isPriorityOg2024Mint(mint);
   const imageUrl = safeHttpUrl(coin.image_uri);
   if (!imageUrl) return null;
   const marketCapUsd = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
-  if (marketCapUsd < minDeadTokenMarketCapUsd()) return null;
+  if (!priorityOg2024 && marketCapUsd < minDeadTokenMarketCapUsd()) return null;
   // Reject scams/spam/rugs before any scoring.
   if (detectScam(coin, dex).scam) return null;
 
@@ -760,14 +852,16 @@ function mapPumpCandidate(
     if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
   } else {
     // General candidates: dormant by trade, or at least near-zero current volume.
-    if (!staleByTrade && !staleByVolume) return null;
-    if (ageDays < minAgeDays()) return null;
-    if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
+    if (!priorityOg2024) {
+      if (!staleByTrade && !staleByVolume) return null;
+      if (ageDays < minAgeDays()) return null;
+      if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
+    }
   }
 
   // A verified gem always qualifies; everything else passes the softer
   // meme-fit gates below.
-  if (!gem.isGem) {
+  if (!gem.isGem && !priorityOg2024) {
     const hasStrongCategory = classified.categories.length > 0 && classified.categoryConfidence >= 32;
     const hasExceptionalHeat = (coin.reply_count ?? 0) >= 300 || (plausibleAthUsd(coin)) >= 250_000;
     const hasUsableMetadata = Boolean(coin.image_uri) && (coin.description ?? "").trim().length >= 16;
@@ -785,9 +879,9 @@ function mapPumpCandidate(
     discovery.signals,
     dex,
   );
-  if (!gem.isGem && scored.qualificationScore < minQualificationScore()) return null;
+  if (!gem.isGem && !priorityOg2024 && scored.qualificationScore < minQualificationScore()) return null;
 
-  return {
+  return applyPriorityOg2024Metadata({
     id: mint,
     source: "pump.fun",
     mint,
@@ -825,7 +919,7 @@ function mapPumpCandidate(
     status: "candidate",
     sweptAt: new Date().toISOString(),
     ...scored,
-  };
+  });
 }
 
 /**
@@ -841,7 +935,7 @@ function isGemProspect(coin: PumpCoin): boolean {
 }
 
 export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDeadToken[]> {
-  const rawCoins = await fetchPumpCoins(limit);
+  const [rawCoins, priorityCandidates] = await Promise.all([fetchPumpCoins(limit), findPriorityOg2024Candidates()]);
   const dexMints = rawCoins
     .filter(
       (coin) =>
@@ -855,7 +949,9 @@ export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDea
     enrichWithDexScreener(dexMints),
     enrichWithHolderCounts(prospectMints),
   ]);
-  return rawCoins
+  const byMint = new Map<string, DiscoveredDeadToken>();
+  for (const candidate of priorityCandidates) byMint.set(candidate.mint, candidate);
+  for (const candidate of rawCoins
     .map((coin) =>
       mapPumpCandidate(
         coin,
@@ -863,8 +959,15 @@ export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDea
         coin.mint ? holders.get(coin.mint) ?? null : null,
       ),
     )
-    .filter((coin): coin is DiscoveredDeadToken => Boolean(coin))
+    .filter((coin): coin is DiscoveredDeadToken => Boolean(coin))) {
+    if (!byMint.has(candidate.mint)) byMint.set(candidate.mint, candidate);
+  }
+  return [...byMint.values()]
     .sort((a, b) => {
+      if (isPriorityOg2024Mint(a.mint) !== isPriorityOg2024Mint(b.mint)) return isPriorityOg2024Mint(a.mint) ? -1 : 1;
+      if (isPriorityOg2024Mint(a.mint) && isPriorityOg2024Mint(b.mint)) {
+        return priorityOg2024Rank(a.mint) - priorityOg2024Rank(b.mint);
+      }
       // Gems first, by gem score; the rest by qualification score.
       if (a.isGem !== b.isGem) return a.isGem ? -1 : 1;
       if (a.isGem && b.isGem) return b.gemScore - a.gemScore;

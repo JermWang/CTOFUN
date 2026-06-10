@@ -271,7 +271,7 @@ export function CatTag({ cat }: { cat: string }) {
       style={
         violet
           ? { color: "var(--violet)", borderColor: "rgba(155,123,255,.3)", background: "rgba(155,123,255,.07)" }
-          : { color: "var(--green)", borderColor: "rgba(0,229,153,.28)", background: "rgba(0,229,153,.06)" }
+          : { color: "var(--green)", borderColor: "rgba(4, 255, 0,.28)", background: "rgba(4, 255, 0,.06)" }
       }
     >
       {cat}
@@ -448,8 +448,8 @@ export function VoteWidget({ initial }: { initial: { revive: number; research: n
               justifyContent: "space-between",
               padding: "11px 14px",
               cursor: cast ? "default" : "pointer",
-              border: "1px solid " + (cast === k ? "rgba(0,229,153,.4)" : "rgba(255,255,255,.07)"),
-              background: cast === k ? "rgba(0,229,153,.07)" : "rgba(255,255,255,.022)",
+              border: "1px solid " + (cast === k ? "rgba(4, 255, 0,.4)" : "rgba(255,255,255,.07)"),
+              background: cast === k ? "rgba(4, 255, 0,.07)" : "rgba(255,255,255,.022)",
               opacity: cast && cast !== k ? 0.55 : 1,
               fontFamily: "var(--sans)",
             }}
@@ -489,8 +489,8 @@ export function CtaPanel() {
             width: 46,
             height: 46,
             borderRadius: 13,
-            border: "1px solid rgba(0,229,153,.3)",
-            background: "rgba(0,229,153,.08)",
+            border: "1px solid rgba(4, 255, 0,.3)",
+            background: "rgba(4, 255, 0,.08)",
             marginBottom: 16,
           }}
         >

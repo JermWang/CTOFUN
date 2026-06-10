@@ -13,7 +13,7 @@ export function SiteFooter() {
       <div className="ftr">
         <div className="wrap ftr-in">
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <SiteLogo variant="dark" height={26} />
+            <SiteLogo variant="dark" height={46} />
             <p className="disc">
               CTO.fun is a community coordination hub for reviving abandoned Pump.fun-origin tokens. Not
               affiliated with or endorsed by Pump.fun. Community takeovers are organized by independent contributors —
