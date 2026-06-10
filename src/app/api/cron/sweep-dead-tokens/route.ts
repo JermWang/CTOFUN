@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
   const limit = Math.min(
     100,
-    Math.max(10, Number(new URL(request.url).searchParams.get("limit") ?? 40)),
+    Math.max(10, Number(new URL(request.url).searchParams.get("limit") ?? 60)),
   );
 
   try {

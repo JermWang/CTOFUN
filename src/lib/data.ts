@@ -9,6 +9,7 @@ import "server-only";
 import { createSupabaseReadClient } from "@/lib/supabase/server";
 import {
   findDeadTokenCandidates,
+  minDeadTokenMarketCapUsd,
   type DiscoveredDeadToken,
 } from "@/lib/dead-token-sweeper";
 import type {
@@ -278,14 +279,22 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// Only surface tokens that have real artwork — never show a token with a
-// missing pfp anywhere on the site. imageUrl is already sanitized to http(s)
-// upstream, so a non-empty value here means a usable image source.
-function hasArtwork(token: DiscoveredDeadToken): boolean {
-  return typeof token.imageUrl === "string" && token.imageUrl.trim().length > 0;
+const DISCOVERED_TOKEN_TARGET = 60;
+
+// Only surface tokens that pass hard display gates: real artwork and a
+// revivable residual market cap, not dust.
+function isDisplayableDeadToken(token: DiscoveredDeadToken): boolean {
+  return (
+    typeof token.imageUrl === "string" &&
+    token.imageUrl.trim().length > 0 &&
+    token.marketCapUsd >= minDeadTokenMarketCapUsd()
+  );
 }
 
 export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> {
+  const minMarketCap = minDeadTokenMarketCapUsd();
+  const storedTokens: DiscoveredDeadToken[] = [];
+
   if (isConfigured()) {
     try {
       const sb = createSupabaseReadClient();
@@ -295,9 +304,15 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
         .in("status", ["candidate", "watchlist"])
         .not("image_url", "is", null)
         .neq("image_url", "")
+        .gte("market_cap_usd", minMarketCap)
         .order("qualification_score", { ascending: false })
-        .limit(60);
-      if (!error && data && data.length > 0) return data.map(mapDiscoveredDeadToken).filter(hasArtwork);
+        .limit(DISCOVERED_TOKEN_TARGET);
+      if (!error && data && data.length > 0) {
+        storedTokens.push(
+          ...data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken).slice(0, DISCOVERED_TOKEN_TARGET),
+        );
+        if (storedTokens.length >= DISCOVERED_TOKEN_TARGET) return storedTokens;
+      }
     } catch {
       // Fall through to live discovery. The page should still render if the DB
       // table has not been migrated yet.
@@ -305,9 +320,15 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
   }
 
   try {
-    return (await findDeadTokenCandidates(24)).filter(hasArtwork);
+    const byMint = new Map<string, DiscoveredDeadToken>();
+    for (const token of storedTokens) byMint.set(token.mint, token);
+    for (const token of (await findDeadTokenCandidates(DISCOVERED_TOKEN_TARGET)).filter(isDisplayableDeadToken)) {
+      if (!byMint.has(token.mint)) byMint.set(token.mint, token);
+      if (byMint.size >= DISCOVERED_TOKEN_TARGET) break;
+    }
+    return [...byMint.values()].slice(0, DISCOVERED_TOKEN_TARGET);
   } catch {
-    return [];
+    return storedTokens;
   }
 }
 

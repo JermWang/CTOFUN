@@ -118,6 +118,10 @@ function gemMinMarketCapUsd() {
   return Number(process.env.GEM_MIN_MARKET_CAP_USD ?? 6_000);
 }
 
+export function minDeadTokenMarketCapUsd() {
+  return Number(process.env.DEAD_TOKEN_MIN_MARKET_CAP_USD ?? gemMinMarketCapUsd());
+}
+
 function gemMaxMarketCapUsd() {
   return Number(process.env.GEM_MAX_MARKET_CAP_USD ?? 80_000);
 }
@@ -367,7 +371,7 @@ function scoreDiscoverySignals(
     score += 4;
     signals.push("low current volume");
   }
-  if (marketCap >= 500 && marketCap <= 500_000) {
+  if (marketCap >= minDeadTokenMarketCapUsd() && marketCap <= 500_000) {
     score += 5;
     signals.push("residual market cap");
   }
@@ -422,9 +426,9 @@ function scoreAndReasons(
     qualificationScore += 6;
     reasons.push("low current 24h volume");
   }
-  if ((coin.usd_market_cap ?? 0) > 500) {
+  if ((coin.usd_market_cap ?? 0) >= minDeadTokenMarketCapUsd()) {
     qualificationScore += 4;
-    reasons.push("nonzero residual market cap");
+    reasons.push("revivable residual market cap");
   }
   if ((plausibleAthUsd(coin)) >= 1_000_000) {
     qualificationScore += 18;
@@ -688,7 +692,7 @@ async function enrichWithDexScreener(mints: string[]) {
   const enabled = process.env.DEXSCREENER_ENRICHMENT !== "false";
   if (!enabled) return enriched;
 
-  const enrichmentLimit = Number(process.env.DEXSCREENER_ENRICHMENT_LIMIT ?? 60);
+  const enrichmentLimit = Number(process.env.DEXSCREENER_ENRICHMENT_LIMIT ?? 120);
   await Promise.all(
     mints.slice(0, enrichmentLimit).map(async (mint) => {
       try {
@@ -716,6 +720,10 @@ function mapPumpCandidate(
 ): DiscoveredDeadToken | null {
   const mint = coin.mint?.trim();
   if (!mint) return null;
+  const imageUrl = safeHttpUrl(coin.image_uri);
+  if (!imageUrl) return null;
+  const marketCapUsd = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
+  if (marketCapUsd < minDeadTokenMarketCapUsd()) return null;
   // Reject scams/spam/rugs before any scoring.
   if (detectScam(coin, dex).scam) return null;
 
@@ -734,10 +742,12 @@ function mapPumpCandidate(
   );
 
   if (ageDays < minAgeDays()) return null;
-  if (dormantDays < minDormantDays()) return null;
-  if ((dex?.volume24hUsd ?? 0) > maxCurrentVolumeUsd()) return null;
+  const currentVolumeUsd = dex?.volume24hUsd ?? null;
+  const staleByTrade = dormantDays >= minDormantDays();
+  const staleByVolume = currentVolumeUsd != null && currentVolumeUsd <= maxCurrentVolumeUsd();
+  if (!staleByTrade && !staleByVolume) return null;
+  if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
 
-  const marketCapUsd = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
   const lifetimeVolumeUsd = estimateLifetimeVolumeUsd(coin);
   const gem = evaluateGem(coin, dormantDays, marketCapUsd, holderCount, lifetimeVolumeUsd);
 
@@ -776,7 +786,7 @@ function mapPumpCandidate(
     name: coin.name?.trim() || "Unknown",
     symbol: coin.symbol?.trim() || "UNKNOWN",
     description: coin.description?.trim() || "",
-    imageUrl: safeHttpUrl(coin.image_uri),
+    imageUrl,
     pumpUrl: pumpUrl(mint),
     chartUrl: chartUrl(mint),
     websiteUrl: safeHttpUrl(coin.website),
@@ -818,10 +828,17 @@ function isGemProspect(coin: PumpCoin): boolean {
 
 export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDeadToken[]> {
   const rawCoins = await fetchPumpCoins(limit);
-  const mints = rawCoins.map((coin) => coin.mint).filter(Boolean) as string[];
+  const dexMints = rawCoins
+    .filter(
+      (coin) =>
+        coin.mint &&
+        safeHttpUrl(coin.image_uri) &&
+        Number(coin.usd_market_cap ?? coin.market_cap ?? 0) >= minDeadTokenMarketCapUsd(),
+    )
+    .map((coin) => coin.mint!) as string[];
   const prospectMints = rawCoins.filter(isGemProspect).map((coin) => coin.mint!) as string[];
   const [dex, holders] = await Promise.all([
-    enrichWithDexScreener(mints),
+    enrichWithDexScreener(dexMints),
     enrichWithHolderCounts(prospectMints),
   ]);
   return rawCoins
@@ -842,7 +859,7 @@ export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDea
     .slice(0, limit);
 }
 
-export async function sweepDeadTokenCandidates(limit = 40) {
+export async function sweepDeadTokenCandidates(limit = 60) {
   const candidates = await findDeadTokenCandidates(limit);
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return { persisted: false, candidates, upserted: 0 };

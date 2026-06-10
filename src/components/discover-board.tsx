@@ -37,6 +37,7 @@ const SORTS = [
 ] as const;
 
 type SortKey = (typeof SORTS)[number]["k"];
+const MIN_DISPLAY_MARKET_CAP_USD = 6_000;
 
 export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) {
   const [filter, setFilter] = React.useState<string>("all");
@@ -44,7 +45,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
   const [q, setQ] = React.useState("");
   const [view, setView] = React.useState<"grid" | "list">("grid");
   const searchRef = React.useRef<HTMLInputElement>(null);
-  const displayCandidates = React.useMemo(() => candidates.filter(hasTokenArtwork), [candidates]);
+  const displayCandidates = React.useMemo(() => candidates.filter(isDisplayableToken), [candidates]);
 
   // Client-only platform read with a stable server snapshot, so the kbd hint
   // hydrates cleanly and switches to ⌘K on macOS.
@@ -259,7 +260,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 function FeaturedCoin({ c }: { c: ProtoCandidate }) {
   const [imageFailed, setImageFailed] = React.useState(false);
 
-  if (!hasTokenArtwork(c) || imageFailed) return null;
+  if (!isDisplayableToken(c) || imageFailed) return null;
 
   return (
     <Link className="discover-feature-card" href="/bounties">
@@ -280,7 +281,7 @@ export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
   const progress = Math.max(12, Math.min(100, c.qual));
   const [imageFailed, setImageFailed] = React.useState(false);
 
-  if (!hasTokenArtwork(c) || imageFailed) return null;
+  if (!isDisplayableToken(c) || imageFailed) return null;
 
   return (
     <article className="discover-card">
@@ -366,7 +367,7 @@ function DiscoverCoinRow({ c }: { c: ProtoCandidate }) {
   const progress = Math.max(12, Math.min(100, c.qual));
   const [imageFailed, setImageFailed] = React.useState(false);
 
-  if (!hasTokenArtwork(c) || imageFailed) return null;
+  if (!isDisplayableToken(c) || imageFailed) return null;
 
   return (
     <article className="discover-row">
@@ -422,8 +423,8 @@ function ExternalCoinLink({ href, label }: { href?: string; label: string }) {
   );
 }
 
-function hasTokenArtwork(c: ProtoCandidate): boolean {
-  return typeof c.imageUrl === "string" && c.imageUrl.trim().length > 0;
+function isDisplayableToken(c: ProtoCandidate): boolean {
+  return typeof c.imageUrl === "string" && c.imageUrl.trim().length > 0 && c.mcap >= MIN_DISPLAY_MARKET_CAP_USD;
 }
 
 function TokenImage({ c, onImageError }: { c: ProtoCandidate; onImageError: () => void }) {
