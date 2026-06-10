@@ -20,6 +20,34 @@ export function safeHttpUrl(value: string | null | undefined): string {
   }
 }
 
+/**
+ * Returns a browser-displayable token artwork URL.
+ *
+ * Pump/IPFS metadata can arrive as `ipfs://...` or through gateways that later
+ * become unreliable. Keep general links strict, but normalize artwork to a
+ * stable HTTP gateway so cards don't disappear when an old gateway fails.
+ */
+export function safeImageUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  const text = value.trim();
+  if (!text) return "";
+
+  if (text.startsWith("ipfs://")) {
+    const path = text.slice("ipfs://".length).replace(/^ipfs\//, "");
+    return path ? `https://ipfs.io/ipfs/${path}` : "";
+  }
+
+  const httpUrl = safeHttpUrl(text);
+  if (!httpUrl) return "";
+
+  const url = new URL(httpUrl);
+  if (url.hostname === "cf-ipfs.com" && url.pathname.startsWith("/ipfs/")) {
+    url.hostname = "ipfs.io";
+    return url.toString();
+  }
+  return url.toString();
+}
+
 /** Compact USD formatter, e.g. $1.2K, $3.4M */
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";

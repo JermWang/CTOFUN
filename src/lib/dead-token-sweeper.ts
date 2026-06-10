@@ -7,7 +7,7 @@ import {
   PRIORITY_OG_2024_MINTS,
 } from "@/lib/priority-tokens";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { safeHttpUrl } from "@/lib/utils";
+import { safeHttpUrl, safeImageUrl } from "@/lib/utils";
 
 const PUMPFUN_COINS_ENDPOINT = "https://frontend-api-v3.pump.fun/coins";
 const DEXSCREENER_TOKEN_ENDPOINT = "https://api.dexscreener.com/latest/dex/tokens";
@@ -688,7 +688,7 @@ export async function lookupPumpTokenByMint(mint: string): Promise<PumpTokenLook
 
   try {
     const coin = await fetchJson<PumpCoin>(`${PUMPFUN_COINS_ENDPOINT}/${encodeURIComponent(cleanMint)}`);
-    const imageUrl = safeHttpUrl(coin.image_uri);
+    const imageUrl = safeImageUrl(coin.image_uri);
     const tokenMint = coin.mint?.trim() || cleanMint;
     if (!tokenMint || !imageUrl) return null;
 
@@ -815,7 +815,7 @@ function mapPumpCandidate(
   const mint = coin.mint?.trim();
   if (!mint) return null;
   const priorityOg2024 = isPriorityOg2024Mint(mint);
-  const imageUrl = safeHttpUrl(coin.image_uri);
+  const imageUrl = safeImageUrl(coin.image_uri);
   if (!imageUrl) return null;
   const marketCapUsd = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
   if (!priorityOg2024 && marketCapUsd < minDeadTokenMarketCapUsd()) return null;
@@ -940,7 +940,7 @@ export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDea
     .filter(
       (coin) =>
         coin.mint &&
-        safeHttpUrl(coin.image_uri) &&
+        safeImageUrl(coin.image_uri) &&
         Number(coin.usd_market_cap ?? coin.market_cap ?? 0) >= minDeadTokenMarketCapUsd(),
     )
     .map((coin) => coin.mint!) as string[];

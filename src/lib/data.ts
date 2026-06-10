@@ -32,7 +32,7 @@ import type {
   RevivalPhase,
 } from "@/lib/domain";
 import { ACTIVE_REVIVAL_STATUSES } from "@/lib/domain";
-import { safeHttpUrl } from "@/lib/utils";
+import { safeHttpUrl, safeImageUrl } from "@/lib/utils";
 
 // Zeroed metrics: real counts are filled in by getGlobalMetrics; untracked
 // fields stay at zero rather than showing invented numbers.
@@ -260,7 +260,7 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
     description: row.description ?? "",
     // Re-validate stored URLs on read so rows persisted before sanitization
     // (or edited out-of-band) still can't surface non-http(s) schemes.
-    imageUrl: safeHttpUrl(row.image_url),
+    imageUrl: safeImageUrl(row.image_url),
     pumpUrl: safeHttpUrl(row.pump_url),
     chartUrl: safeHttpUrl(row.chart_url),
     websiteUrl: safeHttpUrl(row.website_url),
@@ -505,7 +505,7 @@ function mapRevivalApplication(row: any): RevivalApplication {
     mint: row.mint,
     tokenName: row.token_name ?? "",
     tokenSymbol: row.token_symbol ?? "",
-    tokenImageUrl: safeHttpUrl(row.token_image_url),
+    tokenImageUrl: safeImageUrl(row.token_image_url),
     teamName: row.team_name ?? "",
     pitch: row.pitch ?? "",
     plan: row.plan ?? "",

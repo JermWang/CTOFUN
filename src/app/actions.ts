@@ -8,6 +8,7 @@ import { getOrCreateUser, isAdmin } from "@/lib/auth";
 import { getApplicationsForReview, getDiscoveredTokensForReview, getStoredDiscoveredTokenByMint } from "@/lib/data";
 import { MEME_CATEGORIES } from "@/lib/domain";
 import { lookupPumpTokenByMint } from "@/lib/dead-token-sweeper";
+import { safeImageUrl } from "@/lib/utils";
 import {
   collectPumpCreatorFees,
   creatorFeeAutomationStatus,
@@ -706,7 +707,7 @@ export async function applyToReviveToken(
         mint,
         token_name: tokenName,
         token_symbol: tokenSymbol,
-        token_image_url: cleanUrl(input.tokenImageUrl),
+        token_image_url: safeImageUrl(input.tokenImageUrl) || null,
         applicant_id: user.id,
         team_name: teamName,
         pitch,
