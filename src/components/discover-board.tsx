@@ -7,7 +7,6 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   Clock3,
-  Flame,
   Gem,
   Grid2X2,
   MessageCircle,
@@ -45,6 +44,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
   const [q, setQ] = React.useState("");
   const [view, setView] = React.useState<"grid" | "list">("grid");
   const searchRef = React.useRef<HTMLInputElement>(null);
+  const displayCandidates = React.useMemo(() => candidates.filter(hasTokenArtwork), [candidates]);
 
   // Client-only platform read with a stable server snapshot, so the kbd hint
   // hydrates cleanly and switches to ⌘K on macOS.
@@ -83,7 +83,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
 
   const categoryFilters = React.useMemo(() => {
     const counts = new Map<string, number>();
-    for (const candidate of candidates) {
+    for (const candidate of displayCandidates) {
       for (const category of candidate.categories ?? []) {
         counts.set(category, (counts.get(category) ?? 0) + 1);
       }
@@ -92,11 +92,11 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
       .sort(([, a], [, b]) => b - a)
       .slice(0, 8)
       .map(([slug, count]) => ({ slug, count, label: MEME_CATEGORY_LABELS[slug] ?? slug }));
-  }, [candidates]);
+  }, [displayCandidates]);
 
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return candidates
+    return displayCandidates
       .filter((c) => {
         if (filter === "gems" && !c.gem) return false;
         if (filter === "dormant" && c.dormant < 150) return false;
@@ -115,7 +115,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
         return true;
       })
       .sort((a, b) => metricFor(b, sort) - metricFor(a, sort));
-  }, [candidates, filter, q, sort]);
+  }, [displayCandidates, filter, q, sort]);
 
   const top = filtered.slice(0, 3);
 
@@ -160,8 +160,8 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
           <h2>Dormant Pump.fun launches with real revival signals</h2>
         </div>
         <div className="discover-strip-stats">
-          <StatPill label="Candidates" value={fmtNum(candidates.length)} />
-          <StatPill label="Qualified" value={fmtNum(candidates.filter((c) => c.qual >= 60).length)} />
+          <StatPill label="Candidates" value={fmtNum(displayCandidates.length)} />
+          <StatPill label="Qualified" value={fmtNum(displayCandidates.filter((c) => c.qual >= 60).length)} />
           <StatPill label="Categories" value={fmtNum(categoryFilters.length)} />
         </div>
       </div>
@@ -257,9 +257,13 @@ function StatPill({ label, value }: { label: string; value: string }) {
 }
 
 function FeaturedCoin({ c }: { c: ProtoCandidate }) {
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  if (!hasTokenArtwork(c) || imageFailed) return null;
+
   return (
     <Link className="discover-feature-card" href="/bounties">
-      <TokenImage c={c} />
+      <TokenImage c={c} onImageError={() => setImageFailed(true)} />
       <div>
         <span className="discover-chip">Top revival fit</span>
         <h3>{c.name}</h3>
@@ -274,10 +278,14 @@ function FeaturedCoin({ c }: { c: ProtoCandidate }) {
 
 export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
   const progress = Math.max(12, Math.min(100, c.qual));
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  if (!hasTokenArtwork(c) || imageFailed) return null;
+
   return (
     <article className="discover-card">
       <div className="discover-art">
-        <TokenImage c={c} />
+        <TokenImage c={c} onImageError={() => setImageFailed(true)} />
         <div className="discover-score">Fit</div>
         {c.gem ? (
           <div className="discover-gem">
@@ -356,10 +364,14 @@ export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
 
 function DiscoverCoinRow({ c }: { c: ProtoCandidate }) {
   const progress = Math.max(12, Math.min(100, c.qual));
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  if (!hasTokenArtwork(c) || imageFailed) return null;
+
   return (
     <article className="discover-row">
       <div className="discover-row-art">
-        <TokenImage c={c} />
+        <TokenImage c={c} onImageError={() => setImageFailed(true)} />
       </div>
       <div className="discover-row-id">
         <h3>{c.name}</h3>
@@ -410,16 +422,10 @@ function ExternalCoinLink({ href, label }: { href?: string; label: string }) {
   );
 }
 
-function TokenImage({ c }: { c: ProtoCandidate }) {
-  const [failed, setFailed] = React.useState(false);
-  if (!c.imageUrl || failed) {
-    return (
-      <div className="token-fallback" aria-label={`${c.name} token art fallback`}>
-        <Flame size={24} />
-        <span>{c.sym.slice(0, 3).toUpperCase()}</span>
-      </div>
-    );
-  }
+function hasTokenArtwork(c: ProtoCandidate): boolean {
+  return typeof c.imageUrl === "string" && c.imageUrl.trim().length > 0;
+}
 
-  return <img src={c.imageUrl} alt={`${c.name} token artwork`} loading="lazy" onError={() => setFailed(true)} />;
+function TokenImage({ c, onImageError }: { c: ProtoCandidate; onImageError: () => void }) {
+  return <img src={c.imageUrl} alt={`${c.name} token artwork`} loading="lazy" onError={onImageError} />;
 }

@@ -282,7 +282,7 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
 // missing pfp anywhere on the site. imageUrl is already sanitized to http(s)
 // upstream, so a non-empty value here means a usable image source.
 function hasArtwork(token: DiscoveredDeadToken): boolean {
-  return Boolean(token.imageUrl);
+  return typeof token.imageUrl === "string" && token.imageUrl.trim().length > 0;
 }
 
 export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> {
