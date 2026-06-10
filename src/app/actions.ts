@@ -94,49 +94,45 @@ function cleanCategories(categories: unknown): string[] {
     .slice(0, 8);
 }
 
-function submissionTokenMint(): string {
-  return cleanText(process.env.REVIVAL_REQUEST_TOKEN_MINT || process.env.NEXT_PUBLIC_TOKEN_MINT, 90);
-}
-
 function solanaRpcUrl(): string {
   return cleanText(process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL, 500);
 }
 
-function minSubmissionTokenAmount(): number {
-  const n = Number(process.env.REVIVAL_REQUEST_MIN_TOKEN_AMOUNT ?? 1);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
+async function verifyTargetTokenHolding(
+  walletAddress: string | null,
+  mint: string,
+  tokenSymbol: string,
+): Promise<ActionResult> {
+  const targetMint = cleanSolanaAddress(mint);
+  if (!targetMint) return { ok: false, error: "A valid Solana token mint is required." };
 
-async function verifySubmissionTokenHolding(walletAddress: string | null): Promise<ActionResult> {
-  const mint = submissionTokenMint();
-  if (!mint) return { ok: true };
+  const label = tokenSymbol ? `$${tokenSymbol}` : "the token being revived";
   if (!walletAddress) {
-    return { ok: false, error: "Connect a Solana wallet that holds the CTO token to request a revival." };
+    return { ok: false, error: `Connect a Solana wallet that holds ${label} to request this revival.` };
   }
 
   const rpcUrl = solanaRpcUrl();
   if (!rpcUrl) {
-    return { ok: false, error: "Token-gated submissions are not configured. Set SOLANA_RPC_URL." };
+    return { ok: false, error: "Target-token holder checks are not configured. Set SOLANA_RPC_URL." };
   }
 
   try {
     const owner = new PublicKey(walletAddress);
-    const tokenMint = new PublicKey(mint);
+    const tokenMint = new PublicKey(targetMint);
     const connection = new Connection(rpcUrl, "confirmed");
     const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: tokenMint });
-    const required = minSubmissionTokenAmount();
 
     for (const account of accounts.value) {
       // Parsed SPL token shape from getParsedTokenAccountsByOwner.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tokenAmount = (account.account.data as any)?.parsed?.info?.tokenAmount;
-      const uiAmount = Number(tokenAmount?.uiAmountString ?? tokenAmount?.uiAmount ?? 0);
-      if (Number.isFinite(uiAmount) && uiAmount >= required) return { ok: true };
+      const rawAmount = BigInt(tokenAmount?.amount ?? "0");
+      if (rawAmount > BigInt(0)) return { ok: true };
     }
-    return { ok: false, error: "Your connected wallet does not hold enough CTO tokens to request a revival." };
+    return { ok: false, error: `Your connected wallet does not hold ${label}.` };
   } catch (e) {
-    logActionError("verifySubmissionTokenHolding", e);
-    return { ok: false, error: "Could not verify your CTO token balance. Please try again." };
+    logActionError("verifyTargetTokenHolding", e);
+    return { ok: false, error: "Could not verify your target-token balance. Please try again." };
   }
 }
 
@@ -195,7 +191,9 @@ export async function submitDeadCoin(
     const user = await getOrCreateUser(token);
     const name = cleanText(input.name, 120);
     const ticker = cleanTicker(input.ticker);
-    const contractAddress = cleanText(input.contractAddress, 160);
+    const chain = cleanChain(input.chain);
+    const contractAddress =
+      chain === "solana" ? cleanSolanaAddress(input.contractAddress) : cleanText(input.contractAddress, 160);
     const reasonDied = cleanText(input.reasonDied);
     const reasonRevive = cleanText(input.reasonRevive);
 
@@ -203,13 +201,15 @@ export async function submitDeadCoin(
       return { ok: false, error: "Name and ticker are required." };
     }
     if (!contractAddress) {
-      return { ok: false, error: "Contract address is required." };
+      return { ok: false, error: chain === "solana" ? "A valid Solana mint is required." : "Contract address is required." };
     }
     if (!reasonDied || !reasonRevive) {
       return { ok: false, error: "Revival story fields are required." };
     }
-    const holderGate = await verifySubmissionTokenHolding(user.wallet);
-    if (!holderGate.ok) return { ok: false, error: holderGate.error };
+    if (chain === "solana") {
+      const holderGate = await verifyTargetTokenHolding(user.wallet, contractAddress, ticker);
+      if (!holderGate.ok) return { ok: false, error: holderGate.error };
+    }
 
     const admin = createSupabaseAdminClient();
     const limited = await enforceRateLimit(admin, user.id, "submit_dead_coin", 5, 60 * 60);
@@ -221,7 +221,7 @@ export async function submitDeadCoin(
         name,
         ticker,
         contract_address: contractAddress,
-        chain: cleanChain(input.chain),
+        chain,
         chart_url: cleanUrl(input.chartUrl),
         market_cap: cleanOptionalNumber(input.marketCap),
         liquidity: cleanOptionalNumber(input.liquidity),
@@ -463,7 +463,7 @@ export async function applyToReviveToken(
   try {
     const user = await getOrCreateUser(token);
 
-    const mint = cleanText(input.mint, 64);
+    const mint = cleanSolanaAddress(input.mint);
     const tokenName = cleanText(input.tokenName, 120);
     const tokenSymbol = cleanTicker(input.tokenSymbol);
     const teamName = cleanText(input.teamName, 120);
@@ -483,8 +483,8 @@ export async function applyToReviveToken(
       return { ok: false, error: "A valid Solana payout wallet is required to receive the bounty." };
     }
 
-    // Same token-hold gate as scouting: proves skin in the game.
-    const holderGate = await verifySubmissionTokenHolding(user.wallet);
+    // Proves skin in the specific revival target, not a global platform token.
+    const holderGate = await verifyTargetTokenHolding(user.wallet, mint, tokenSymbol);
     if (!holderGate.ok) return { ok: false, error: holderGate.error };
 
     const admin = createSupabaseAdminClient();
