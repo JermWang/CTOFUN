@@ -619,6 +619,12 @@ export async function setRevivalTarget(
 
     const { error } = await admin.from("discovered_dead_tokens").update(patch).eq("mint", mint);
     if (error) {
+      console.error("[setRevivalTarget:update] Detailed error:", {
+        message: error.message,
+        code: (error as any).code,
+        details: (error as any).details,
+        hint: (error as any).hint,
+      });
       logActionError("setRevivalTarget:update", error);
       return { ok: false, error: "Could not update the revival target." };
     }
