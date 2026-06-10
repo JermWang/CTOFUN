@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AsciiShader } from "@/components/protocol-ui";
 import { Pipeline } from "@/components/protocol-blocks";
 import { SplashTokenCarousel } from "@/components/splash-token-carousel";
+import { TokenCopyButton } from "@/components/token-copy-button";
 import { getGlobalMetrics, getStoredDiscoveredDeadTokens } from "@/lib/data";
 import { fmtNum, fmtUsd } from "@/lib/format";
 import { toProtoCandidate } from "@/lib/proto-adapters";
@@ -17,13 +18,19 @@ export default async function Home() {
   // Hand the carousel a spare pool (not just the 5 visible): if a token's
   // artwork 404s at runtime it's dropped and backfilled with a real one.
   const carouselTokens = discovered.slice(0, 16).map(toProtoCandidate);
+  const tokenMint = process.env.NEXT_PUBLIC_TOKEN_MINT || process.env.REVIVAL_REQUEST_TOKEN_MINT;
 
   return (
     <div className="proto splash-home">
       <section className="hero lq-frame">
         <AsciiShader opacity={0.17} mask="hero" />
         <div className="wrap hero-grid">
-          <div>
+          {carouselTokens.length > 0 && (
+            <div className="splash-carousel-shell">
+              <SplashTokenCarousel tokens={carouselTokens} />
+            </div>
+          )}
+          <div className="hero-content">
             <div className="eyebrow" style={{ letterSpacing: ".2em" }}>
               PUMP.FUN-ORIGIN REVIVAL PROTOCOL
             </div>
@@ -42,6 +49,7 @@ export default async function Home() {
               <Link className="btn btn-solid" href="/discover">
                 Discover Candidates -&gt;
               </Link>
+              <TokenCopyButton tokenMint={tokenMint} />
             </div>
             <div className="hero-stats">
               {([
@@ -56,11 +64,6 @@ export default async function Home() {
               ))}
             </div>
           </div>
-          {carouselTokens.length > 0 && (
-            <div className="splash-carousel-shell">
-              <SplashTokenCarousel tokens={carouselTokens} />
-            </div>
-          )}
         </div>
         <div className="wrap splash-pipeline">
           <Pipeline />
