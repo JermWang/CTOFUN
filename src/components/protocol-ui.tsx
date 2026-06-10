@@ -73,13 +73,17 @@ export function AsciiShader({
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0;
     let last = 0;
-    let t = reduce ? 1.2 : 0.35;
+    let t = 0.35;
+    // Lava-lamp drift: the field is ALWAYS in gentle motion. Reduced-motion only
+    // slows the flow (it never freezes), honoring "always moving a bit".
+    const speed = reduce ? 0.018 : 0.055;
+    const frameMs = reduce ? 150 : 90;
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      if (now - last < 110) return;
+      if (now - last < frameMs) return;
       last = now;
-      if (!reduce) t += 0.055;
+      t += speed;
 
       let out = "";
       for (let y = 0; y < rows; y++) {

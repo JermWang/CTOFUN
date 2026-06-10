@@ -110,6 +110,7 @@ function gemMinHolders() {
   return Number(process.env.GEM_MIN_HOLDERS ?? 1_000);
 }
 
+
 function gemMinLifetimeVolumeUsd() {
   return Number(process.env.GEM_MIN_LIFETIME_VOLUME_USD ?? 5_000_000);
 }
@@ -741,15 +742,26 @@ function mapPumpCandidate(
     dex,
   );
 
-  if (ageDays < minAgeDays()) return null;
+  const lifetimeVolumeUsd = estimateLifetimeVolumeUsd(coin);
+  const gem = evaluateGem(coin, dormantDays, marketCapUsd, holderCount, lifetimeVolumeUsd);
+
   const currentVolumeUsd = dex?.volume24hUsd ?? null;
   const staleByTrade = dormantDays >= minDormantDays();
   const staleByVolume = currentVolumeUsd != null && currentVolumeUsd <= maxCurrentVolumeUsd();
-  if (!staleByTrade && !staleByVolume) return null;
-  if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
-
-  const lifetimeVolumeUsd = estimateLifetimeVolumeUsd(coin);
-  const gem = evaluateGem(coin, dormantDays, marketCapUsd, holderCount, lifetimeVolumeUsd);
+  if (gem.isGem) {
+    // A verified gem must be FADED, not actively traded: reject if current 24h
+    // volume is above the ceiling. (pump.fun coins almost never have zero trades
+    // thanks to stragglers/bots, so low *volume* — not zero trades — is the
+    // realistic abandonment signal.) When volume is unknown, the residual-band
+    // cap + 1,000+ on-chain holders already define the gem. Minimum age does not
+    // apply.
+    if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
+  } else {
+    // General candidates: dormant by trade, or at least near-zero current volume.
+    if (!staleByTrade && !staleByVolume) return null;
+    if (ageDays < minAgeDays()) return null;
+    if (currentVolumeUsd != null && currentVolumeUsd > maxCurrentVolumeUsd()) return null;
+  }
 
   // A verified gem always qualifies; everything else passes the softer
   // meme-fit gates below.
