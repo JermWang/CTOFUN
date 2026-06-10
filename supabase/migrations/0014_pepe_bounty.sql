@@ -1,12 +1,6 @@
 -- ============================================================================
 -- Add PEPE bounty (1.5 SOL, 14 day deadline)
 -- ============================================================================
--- Mark PEPE token as 'targeted' in discovered_dead_tokens
-update discovered_dead_tokens
-set status = 'targeted'
-where mint = 'GsR6Z8sxiz9oiLWYAMYDvJu9jf3QwNbCa8xK4Emfh7F3'
-  and status != 'targeted';
-
 -- Create revival campaign for PEPE (if not exists)
 insert into revival_campaigns (
   dead_coin_id,
