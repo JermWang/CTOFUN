@@ -10,6 +10,12 @@ export interface DiscoveredDeadToken {
   id: string;
   source: "pump.fun";
   mint: string;
+  holderCount: number | null;
+  lifetimeVolumeUsd: number | null;
+  lifetimeVolumeSource: "indexed" | "estimated" | "";
+  isGem: boolean;
+  gemScore: number;
+  gemReasons: string[];
   name: string;
   symbol: string;
   description: string;
@@ -64,6 +70,7 @@ interface PumpCoin {
   ath_market_cap_timestamp?: number;
   nsfw?: boolean;
   is_banned?: boolean;
+  hidden?: boolean;
 }
 
 interface DexPair {
@@ -92,6 +99,125 @@ const CATEGORY_RULES: CategoryRule[] = [
   { slug: "absurd", terms: ["fart", "silly", "weird", "nothing", "trash", "chaos", "goon", "brainrot"] },
   { slug: "animals", terms: ["dog", "cat", "frog", "bird", "fish", "monkey", "ape", "horse", "cow", "duck", "goat"] },
 ];
+
+// ----------------------------------------------------------------------------
+// GEM thesis: an abandoned Pump.fun coin worth a CTO had a real community
+// (holders), real lifetime turnover (volume), and still has a residual-but-
+// cheap market cap — i.e. survivors are holding the bag and waiting.
+// All thresholds are env-tunable.
+// ----------------------------------------------------------------------------
+function gemMinHolders() {
+  return Number(process.env.GEM_MIN_HOLDERS ?? 1_000);
+}
+
+function gemMinLifetimeVolumeUsd() {
+  return Number(process.env.GEM_MIN_LIFETIME_VOLUME_USD ?? 5_000_000);
+}
+
+function gemMinMarketCapUsd() {
+  return Number(process.env.GEM_MIN_MARKET_CAP_USD ?? 6_000);
+}
+
+function gemMaxMarketCapUsd() {
+  return Number(process.env.GEM_MAX_MARKET_CAP_USD ?? 80_000);
+}
+
+function holderEnrichmentLimit() {
+  return Number(process.env.HELIUS_HOLDER_ENRICHMENT_LIMIT ?? 50);
+}
+
+/** Helius RPC URL for DAS calls. Falls back to SOLANA_RPC_URL when it is a Helius endpoint. */
+function heliusRpcUrl(): string {
+  const explicit = (process.env.HELIUS_RPC_URL ?? "").trim();
+  if (explicit) return explicit;
+  const key = (process.env.HELIUS_API_KEY ?? "").trim();
+  if (key) return `https://mainnet.helius-rpc.com/?api-key=${key}`;
+  const rpc = (process.env.SOLANA_RPC_URL ?? "").trim();
+  return rpc.includes("helius") ? rpc : "";
+}
+
+// Minimum residual on-chain liquidity (USD) for a *migrated* token to count as
+// revivable rather than a pulled-LP rug. Only enforced when liquidity is known.
+function minResidualLiquidityUsd() {
+  return Number(process.env.GEM_MIN_RESIDUAL_LIQUIDITY_USD ?? 150);
+}
+
+/**
+ * pump.fun's `ath_market_cap` is frequently corrupt (unit glitches produce
+ * values in the hundreds of billions). Accept it only when it's plausible: no
+ * real pump.fun coin sustained an ATH above ~$2B, and an ATH more than
+ * 100,000x the current cap is almost certainly a data artifact. Returns a
+ * trustworthy USD ATH or 0.
+ */
+function plausibleAthUsd(coin: PumpCoin): number {
+  const ath = coin.ath_market_cap ?? 0;
+  const mcap = coin.usd_market_cap ?? coin.market_cap ?? 0;
+  if (!Number.isFinite(ath) || ath <= 0 || ath > 2_000_000_000) return 0;
+  if (mcap > 0 && ath / mcap > 100_000) return 0;
+  return ath;
+}
+
+// ----------------------------------------------------------------------------
+// Scam / spam detection. Pump.fun is adversarial: phishing-named tokens, fake
+// airdrops, and pulled-liquidity rugs all show up in the same feeds. Reject
+// them before they can be scored or surfaced.
+// ----------------------------------------------------------------------------
+const SCAM_TEXT_PATTERNS: RegExp[] = [
+  /\bair\s?drops?\b/i,
+  /\bclaim\b/i,
+  /\bfree\s?(mint|sol|tokens?|claim)\b/i,
+  /\bpre\s?sale\b/i,
+  /\bguaranteed\b/i,
+  /\b(double|triple|10x|100x|1000x)\s+(your|guaranteed)\b/i,
+  /\bsend\s+\d*\s?sol\b/i,
+  /\b(verify|connect)\s+(your\s+)?wallet\b/i,
+  /\bgiveaway\b/i,
+  /\bvisit\b.*\b(claim|airdrop)\b/i,
+  /https?:\/\//i,
+  /\bt\.me\//i,
+  /\bwww\./i,
+];
+
+interface ScamVerdict {
+  scam: boolean;
+  reason: string;
+}
+
+function detectScam(
+  coin: PumpCoin,
+  dex?: { liquidityUsd: number | null; volume24hUsd: number | null },
+): ScamVerdict {
+  if (coin.is_banned) return { scam: true, reason: "banned on pump.fun" };
+  if (coin.nsfw) return { scam: true, reason: "nsfw" };
+  if (coin.hidden) return { scam: true, reason: "hidden on pump.fun" };
+
+  const name = coin.name ?? "";
+  const symbol = coin.symbol ?? "";
+  const description = coin.description ?? "";
+  // URLs/handles in the NAME or SYMBOL are a strong phishing signal (legit
+  // links live in the dedicated website/telegram fields, not the name).
+  for (const pattern of SCAM_TEXT_PATTERNS) {
+    if (pattern.test(name) || pattern.test(symbol)) {
+      return { scam: true, reason: "phishing-style name" };
+    }
+  }
+  // Description phishing terms are only damning alongside the call-to-action
+  // ones; a "free" mention alone in a description is too noisy.
+  if (/\b(air\s?drops?|claim now|connect\s+wallet|verify\s+wallet|free\s?mint)\b/i.test(description)) {
+    return { scam: true, reason: "phishing-style description" };
+  }
+  // The mint address echoed in the name = automated spam mint.
+  if (coin.mint && name.includes(coin.mint.slice(0, 8))) {
+    return { scam: true, reason: "bot-spam mint" };
+  }
+  // Migrated to Raydium but liquidity drained to dust => pulled-LP rug, and
+  // untradeable regardless. Only judge when liquidity is actually known.
+  const migrated = Boolean(coin.complete || coin.raydium_pool || coin.pool_address);
+  if (migrated && dex && dex.liquidityUsd != null && dex.liquidityUsd < minResidualLiquidityUsd()) {
+    return { scam: true, reason: "liquidity pulled (rug)" };
+  }
+  return { scam: false, reason: "" };
+}
 
 function minDormantDays() {
   return Number(process.env.DEAD_TOKEN_MIN_DORMANT_DAYS ?? 45);
@@ -184,7 +310,7 @@ function scoreDiscoverySignals(
   const signals: string[] = [];
   let score = 0;
   const replies = coin.reply_count ?? 0;
-  const ath = coin.ath_market_cap ?? 0;
+  const ath = plausibleAthUsd(coin);
   const marketCap = coin.usd_market_cap ?? coin.market_cap ?? 0;
   const hasSocials = Boolean(coin.twitter || coin.telegram || coin.website);
   const currentVolume = dex?.volume24hUsd ?? 0;
@@ -300,12 +426,12 @@ function scoreAndReasons(
     qualificationScore += 4;
     reasons.push("nonzero residual market cap");
   }
-  if ((coin.ath_market_cap ?? 0) >= 1_000_000) {
+  if ((plausibleAthUsd(coin)) >= 1_000_000) {
     qualificationScore += 18;
-    reasons.push(`ATH cap ${formatCompactUsd(coin.ath_market_cap ?? 0)}`);
-  } else if ((coin.ath_market_cap ?? 0) >= 100_000) {
+    reasons.push(`ATH cap ${formatCompactUsd(plausibleAthUsd(coin))}`);
+  } else if ((plausibleAthUsd(coin)) >= 100_000) {
     qualificationScore += 12;
-    reasons.push(`ATH cap ${formatCompactUsd(coin.ath_market_cap ?? 0)}`);
+    reasons.push(`ATH cap ${formatCompactUsd(plausibleAthUsd(coin))}`);
   }
   if (coin.image_uri && (coin.description ?? "").trim().length >= 32) {
     qualificationScore += 6;
@@ -323,6 +449,111 @@ function scoreAndReasons(
     revivalScore,
     qualificationReasons: reasons.slice(0, 5),
   };
+}
+
+// ----------------------------------------------------------------------------
+// GEM evaluation.
+//
+// Hard gates (all must hold for isGem) — verifiable, accurate data only:
+//   1. residual market cap inside [GEM_MIN_MARKET_CAP_USD, GEM_MAX_MARKET_CAP_USD]
+//      (real pump.fun usd_market_cap)
+//   2. holders >= GEM_MIN_HOLDERS, verified on-chain via Helius. With no Helius
+//      key the gate is "unverified" and only score >= 72 may pass.
+//   3. dormancy/age gates inherited from the sweep; scams rejected upstream.
+//
+// Lifetime volume is NOT a hard gate: pump.fun exposes no accurate lifetime
+// volume, so we never block on an estimate. It contributes to the score only.
+//
+// Score (0-100): holders 24 + est. lifetime volume 20 + ATH:MC upside 18 +
+// community heat 12 + MC sweet spot 8 + graduation 8 + dormancy window 6 +
+// brand kit 4.
+// ----------------------------------------------------------------------------
+interface GemVerdict {
+  isGem: boolean;
+  gemScore: number;
+  gemReasons: string[];
+}
+
+function evaluateGem(
+  coin: PumpCoin,
+  dormantDays: number,
+  marketCapUsd: number,
+  holderCount: number | null,
+  lifetimeVolumeUsd: number,
+): GemVerdict {
+  const reasons: string[] = [];
+  let score = 0;
+
+  // Holders (0-24). Unknown gets a neutral baseline, verified scales by log.
+  if (holderCount === null) {
+    score += 8;
+  } else if (holderCount >= gemMinHolders()) {
+    score += Math.round(14 + 10 * Math.min(1, Math.log10(holderCount / gemMinHolders())));
+    reasons.push(holderCount >= HOLDER_PAGE_LIMIT ? `${HOLDER_PAGE_LIMIT}+ holders` : `${holderCount} holders`);
+  } else {
+    score += Math.round(14 * (holderCount / gemMinHolders()));
+  }
+
+  // Lifetime volume (0-20), log-scaled past the $5M floor (10x floor maxes it).
+  // pump.fun exposes no real lifetime-volume field, so this is an estimate and
+  // a *signal* only — it never hard-gates a gem (see isGem below).
+  if (lifetimeVolumeUsd >= gemMinLifetimeVolumeUsd()) {
+    score += Math.round(
+      12 + 8 * Math.min(1, Math.log10(lifetimeVolumeUsd / gemMinLifetimeVolumeUsd())),
+    );
+    reasons.push(`~${formatCompactUsd(lifetimeVolumeUsd)} est. lifetime volume`);
+  } else if (lifetimeVolumeUsd > 0) {
+    score += Math.round(12 * (lifetimeVolumeUsd / gemMinLifetimeVolumeUsd()));
+  }
+
+  // ATH upside (0-18): how far the coin fell — the revival narrative.
+  const ath = plausibleAthUsd(coin);
+  const ratio = marketCapUsd > 0 ? ath / marketCapUsd : 0;
+  if (ratio >= 100) score += 18;
+  else if (ratio >= 30) score += 14;
+  else if (ratio >= 10) score += 10;
+  else if (ratio >= 3) score += 5;
+  if (ratio >= 10) reasons.push(`${Math.round(ratio)}x below ATH`);
+
+  // Community heat (0-12).
+  const replies = coin.reply_count ?? 0;
+  if (replies >= 500) score += 12;
+  else if (replies >= 250) score += 9;
+  else if (replies >= 100) score += 6;
+  else if (replies >= 35) score += 3;
+
+  // Residual-cap sweet spot (0-8): inside the band, with the middle ideal.
+  const inBand = marketCapUsd >= gemMinMarketCapUsd() && marketCapUsd <= gemMaxMarketCapUsd();
+  if (inBand) {
+    score += marketCapUsd >= 10_000 && marketCapUsd <= 50_000 ? 8 : 5;
+    reasons.push(`${formatCompactUsd(marketCapUsd)} residual cap`);
+  }
+
+  // Graduation (0-8): cleared the bonding curve = proven demand.
+  if (coin.complete || coin.raydium_pool || coin.pool_address) score += 8;
+  else if (coin.king_of_the_hill_timestamp) score += 4;
+
+  // Dormancy window (0-6): dead long enough to be abandoned, not so long the
+  // community has fully evaporated.
+  if (dormantDays >= 60 && dormantDays <= 365) score += 6;
+  else if (dormantDays >= 45 && dormantDays <= 720) score += 3;
+  else score += 1;
+
+  // Brand kit (0-4): revivable identity out of the box.
+  if (coin.image_uri && (coin.description ?? "").trim().length >= 32) score += 2;
+  if (coin.twitter || coin.telegram || coin.website) score += 2;
+
+  const gemScore = Math.min(100, score);
+  // Hard gates use ONLY verifiable, accurate data: residual market-cap band
+  // (pump.fun usd_market_cap) and 1,000+ real on-chain holders (Helius).
+  // Lifetime volume is unavailable accurately from pump.fun, so it informs the
+  // score but never gates. When holders can't be verified (no Helius key), a
+  // high composite score is required as a proxy.
+  const holdersOk = holderCount === null ? gemScore >= 72 : holderCount >= gemMinHolders();
+  const isGem = inBand && holdersOk;
+  if (isGem && holderCount === null) reasons.push("holders unverified");
+
+  return { isGem, gemScore, gemReasons: reasons.slice(0, 5) };
 }
 
 function formatCompactUsd(value: number) {
@@ -348,9 +579,15 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 async function fetchPumpCoins(limit: number): Promise<PumpCoin[]> {
   const pageSize = 50;
+  const deep = limit >= 50;
   const oldPageCount = Math.min(6, Math.max(3, Math.ceil(limit / 15)));
   const oldOffsets = Array.from({ length: oldPageCount }, (_, i) => i * pageSize);
-  const heatOffsets = [0, 50];
+  // Gems hide DEEP in these rankings: high-community coins (reply_count) that
+  // have since faded, and former higher-cap coins (market_cap) that fell into
+  // the residual band. Shallow pages only return still-alive coins, so we page
+  // well past the top to reach abandoned-but-once-loved tokens.
+  const heatOffsets = deep ? [0, 50, 100, 150, 200, 300, 400, 500] : [0, 50, 100];
+  const capOffsets = deep ? [0, 100, 200, 300, 450, 600] : [0, 100, 200];
   const urls = [
     ...oldOffsets.map(
       (offset) =>
@@ -364,7 +601,10 @@ async function fetchPumpCoins(limit: number): Promise<PumpCoin[]> {
       (offset) =>
         `${PUMPFUN_COINS_ENDPOINT}?offset=${offset}&limit=${pageSize}&sort=reply_count&order=DESC&includeNsfw=false`,
     ),
-    `${PUMPFUN_COINS_ENDPOINT}?offset=0&limit=${pageSize}&sort=market_cap&order=DESC&includeNsfw=false`,
+    ...capOffsets.map(
+      (offset) =>
+        `${PUMPFUN_COINS_ENDPOINT}?offset=${offset}&limit=${pageSize}&sort=market_cap&order=DESC&includeNsfw=false`,
+    ),
     `${PUMPFUN_COINS_ENDPOINT}?offset=0&limit=${pageSize}&sort=volume&order=DESC&includeNsfw=false`,
   ];
 
@@ -377,6 +617,70 @@ async function fetchPumpCoins(limit: number): Promise<PumpCoin[]> {
     }
   }
   return [...byMint.values()];
+}
+
+// ----------------------------------------------------------------------------
+// Holder-count enrichment via Helius DAS getTokenAccounts. One page of up to
+// 1000 accounts per mint: if the page is full we know holders >= 1000, which
+// is exactly the gem gate — no need to paginate the long tail.
+// ----------------------------------------------------------------------------
+const HOLDER_PAGE_LIMIT = 1_000;
+
+async function fetchHolderCount(rpcUrl: string, mint: string): Promise<number | null> {
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `holders-${mint}`,
+        method: "getTokenAccounts",
+        params: { mint, page: 1, limit: HOLDER_PAGE_LIMIT, options: { showZeroBalance: false } },
+      }),
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      result?: { token_accounts?: { owner?: string; amount?: number | string }[] };
+    };
+    const accounts = payload.result?.token_accounts;
+    if (!Array.isArray(accounts)) return null;
+    if (accounts.length >= HOLDER_PAGE_LIMIT) return HOLDER_PAGE_LIMIT; // floor: ">= 1000"
+    const owners = new Set<string>();
+    for (const account of accounts) {
+      if (account.owner && Number(account.amount ?? 0) > 0) owners.add(account.owner);
+    }
+    return owners.size;
+  } catch {
+    return null;
+  }
+}
+
+async function enrichWithHolderCounts(mints: string[]) {
+  const holders = new Map<string, number | null>();
+  const rpcUrl = heliusRpcUrl();
+  if (!rpcUrl || mints.length === 0) return holders;
+  await Promise.all(
+    mints.slice(0, holderEnrichmentLimit()).map(async (mint) => {
+      holders.set(mint, await fetchHolderCount(rpcUrl, mint));
+    }),
+  );
+  return holders;
+}
+
+/**
+ * Pump.fun's API exposes no lifetime-volume field, so without an indexer we
+ * estimate it from ATH market cap: graduating the bonding curve plus a Raydium
+ * life implies turnover of roughly 3x ATH cap; curve-only coins closer to
+ * 1.5x. Deliberately conservative — used only when Helius/Birdeye style
+ * indexed volume is unavailable.
+ */
+function estimateLifetimeVolumeUsd(coin: PumpCoin): number {
+  const ath = plausibleAthUsd(coin);
+  if (ath <= 0) return 0;
+  const graduated = Boolean(coin.complete || coin.raydium_pool || coin.pool_address);
+  return Math.round(ath * (graduated ? 3 : 1.5));
 }
 
 async function enrichWithDexScreener(mints: string[]) {
@@ -408,9 +712,12 @@ async function enrichWithDexScreener(mints: string[]) {
 function mapPumpCandidate(
   coin: PumpCoin,
   dex?: { liquidityUsd: number | null; volume24hUsd: number | null },
+  holderCount: number | null = null,
 ): DiscoveredDeadToken | null {
   const mint = coin.mint?.trim();
-  if (!mint || coin.nsfw || coin.is_banned) return null;
+  if (!mint) return null;
+  // Reject scams/spam/rugs before any scoring.
+  if (detectScam(coin, dex).scam) return null;
 
   const createdAt = toIso(coin.created_timestamp);
   const lastTradeAt = toIso(coin.last_trade_timestamp);
@@ -428,14 +735,22 @@ function mapPumpCandidate(
 
   if (ageDays < minAgeDays()) return null;
   if (dormantDays < minDormantDays()) return null;
-
-  const hasStrongCategory = classified.categories.length > 0 && classified.categoryConfidence >= 32;
-  const hasExceptionalHeat = (coin.reply_count ?? 0) >= 300 || (coin.ath_market_cap ?? 0) >= 250_000;
-  const hasUsableMetadata = Boolean(coin.image_uri) && (coin.description ?? "").trim().length >= 16;
-  if (!hasUsableMetadata && !hasExceptionalHeat) return null;
-  if (!hasStrongCategory && !hasExceptionalHeat) return null;
-  if (discovery.score < minGemSignalScore()) return null;
   if ((dex?.volume24hUsd ?? 0) > maxCurrentVolumeUsd()) return null;
+
+  const marketCapUsd = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
+  const lifetimeVolumeUsd = estimateLifetimeVolumeUsd(coin);
+  const gem = evaluateGem(coin, dormantDays, marketCapUsd, holderCount, lifetimeVolumeUsd);
+
+  // A verified gem always qualifies; everything else passes the softer
+  // meme-fit gates below.
+  if (!gem.isGem) {
+    const hasStrongCategory = classified.categories.length > 0 && classified.categoryConfidence >= 32;
+    const hasExceptionalHeat = (coin.reply_count ?? 0) >= 300 || (plausibleAthUsd(coin)) >= 250_000;
+    const hasUsableMetadata = Boolean(coin.image_uri) && (coin.description ?? "").trim().length >= 16;
+    if (!hasUsableMetadata && !hasExceptionalHeat) return null;
+    if (!hasStrongCategory && !hasExceptionalHeat) return null;
+    if (discovery.score < minGemSignalScore()) return null;
+  }
 
   const scored = scoreAndReasons(
     coin,
@@ -446,12 +761,18 @@ function mapPumpCandidate(
     discovery.signals,
     dex,
   );
-  if (scored.qualificationScore < minQualificationScore()) return null;
+  if (!gem.isGem && scored.qualificationScore < minQualificationScore()) return null;
 
   return {
     id: mint,
     source: "pump.fun",
     mint,
+    holderCount,
+    lifetimeVolumeUsd: lifetimeVolumeUsd || null,
+    lifetimeVolumeSource: lifetimeVolumeUsd > 0 ? "estimated" : "",
+    isGem: gem.isGem,
+    gemScore: gem.gemScore,
+    gemReasons: gem.gemReasons,
     name: coin.name?.trim() || "Unknown",
     symbol: coin.symbol?.trim() || "UNKNOWN",
     description: coin.description?.trim() || "",
@@ -467,11 +788,11 @@ function mapPumpCandidate(
     replyCount: coin.reply_count ?? 0,
     migrated: Boolean(coin.complete || coin.raydium_pool || coin.pool_address),
     raydiumPool: coin.raydium_pool ?? coin.pool_address ?? "",
-    marketCapUsd: Number(coin.usd_market_cap ?? coin.market_cap ?? 0),
+    marketCapUsd,
     liquidityUsd: dex?.liquidityUsd ?? null,
     volume24hUsd: dex?.volume24hUsd ?? null,
     historicalVolumeUsd: null,
-    athMarketCapUsd: coin.ath_market_cap ?? null,
+    athMarketCapUsd: plausibleAthUsd(coin) || null,
     athMarketCapAt: toIso(coin.ath_market_cap_timestamp),
     categories: classified.categories,
     categoryScores: classified.categoryScores,
@@ -483,13 +804,41 @@ function mapPumpCandidate(
   };
 }
 
+/**
+ * Gem prospects worth a Helius holder lookup: any coin whose residual market
+ * cap sits inside the gem band. Holder count is the decisive (and accurate)
+ * gate, so we verify it for every in-band candidate rather than pre-filtering
+ * on the unreliable volume estimate. Keeps RPC spend proportional to the small
+ * in-band subset instead of the whole sweep.
+ */
+function isGemProspect(coin: PumpCoin): boolean {
+  const mcap = Number(coin.usd_market_cap ?? coin.market_cap ?? 0);
+  return mcap >= gemMinMarketCapUsd() && mcap <= gemMaxMarketCapUsd();
+}
+
 export async function findDeadTokenCandidates(limit = 30): Promise<DiscoveredDeadToken[]> {
   const rawCoins = await fetchPumpCoins(limit);
-  const dex = await enrichWithDexScreener(rawCoins.map((coin) => coin.mint).filter(Boolean) as string[]);
+  const mints = rawCoins.map((coin) => coin.mint).filter(Boolean) as string[];
+  const prospectMints = rawCoins.filter(isGemProspect).map((coin) => coin.mint!) as string[];
+  const [dex, holders] = await Promise.all([
+    enrichWithDexScreener(mints),
+    enrichWithHolderCounts(prospectMints),
+  ]);
   return rawCoins
-    .map((coin) => mapPumpCandidate(coin, coin.mint ? dex.get(coin.mint) : undefined))
+    .map((coin) =>
+      mapPumpCandidate(
+        coin,
+        coin.mint ? dex.get(coin.mint) : undefined,
+        coin.mint ? holders.get(coin.mint) ?? null : null,
+      ),
+    )
     .filter((coin): coin is DiscoveredDeadToken => Boolean(coin))
-    .sort((a, b) => b.qualificationScore - a.qualificationScore)
+    .sort((a, b) => {
+      // Gems first, by gem score; the rest by qualification score.
+      if (a.isGem !== b.isGem) return a.isGem ? -1 : 1;
+      if (a.isGem && b.isGem) return b.gemScore - a.gemScore;
+      return b.qualificationScore - a.qualificationScore;
+    })
     .slice(0, limit);
 }
 
@@ -500,7 +849,16 @@ export async function sweepDeadTokenCandidates(limit = 40) {
   }
 
   const sb = createSupabaseAdminClient();
+  const gemColumns = (candidate: DiscoveredDeadToken) => ({
+    holder_count: candidate.holderCount,
+    lifetime_volume_usd: candidate.lifetimeVolumeUsd,
+    lifetime_volume_source: candidate.lifetimeVolumeSource || null,
+    is_gem: candidate.isGem,
+    gem_score: candidate.gemScore,
+    gem_reasons: candidate.gemReasons,
+  });
   const rows = candidates.map((candidate) => ({
+    ...gemColumns(candidate),
     source: candidate.source,
     source_token_id: candidate.mint,
     mint: candidate.mint,
@@ -542,7 +900,29 @@ export async function sweepDeadTokenCandidates(limit = 40) {
   const { error } = await sb
     .from("discovered_dead_tokens")
     .upsert(rows, { onConflict: "mint" });
-  if (error) throw error;
+  if (error) {
+    // Gem columns ship in migration 0008; keep sweeping on databases that
+    // have not applied it yet by retrying without them.
+    const missingColumn = error.code === "PGRST204" || error.code === "42703";
+    if (!missingColumn) throw error;
+    const gemKeys = [
+      "holder_count",
+      "lifetime_volume_usd",
+      "lifetime_volume_source",
+      "is_gem",
+      "gem_score",
+      "gem_reasons",
+    ];
+    const legacyRows = rows.map((row) => {
+      const legacy: Record<string, unknown> = { ...row };
+      for (const key of gemKeys) delete legacy[key];
+      return legacy;
+    });
+    const { error: legacyError } = await sb
+      .from("discovered_dead_tokens")
+      .upsert(legacyRows, { onConflict: "mint" });
+    if (legacyError) throw legacyError;
+  }
 
   return { persisted: true, candidates, upserted: rows.length };
 }

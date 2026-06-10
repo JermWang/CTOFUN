@@ -1,7 +1,8 @@
 // ============================================================================
-// Live data-access layer. Queries Supabase (public RLS read) and maps rows to
-// the UI types in mock-data.ts. Falls back to the mock arrays if Supabase isn't
-// configured or a query fails, so the app never hard-crashes on data.
+// Live data-access layer. Queries Supabase (service-role read) and maps rows
+// to the UI DTO types. No mock data: when Supabase is unconfigured or a query
+// fails, getters return empty results so the UI renders honest empty states
+// instead of fabricated content.
 // ============================================================================
 
 import "server-only";
@@ -10,23 +11,39 @@ import {
   findDeadTokenCandidates,
   type DiscoveredDeadToken,
 } from "@/lib/dead-token-sweeper";
-import {
-  deadCoins as mockDeadCoins,
-  campaigns as mockCampaigns,
-  graduatedCampaigns as mockGraduated,
-  bounties as mockBounties,
-  contributors as mockContributors,
-  buybacks as mockBuybacks,
-  guildStats as mockGuildStats,
-  globalMetrics as mockGlobalMetrics,
-  type DeadCoin,
-  type RevivalCampaign,
-  type Bounty,
-  type Contributor,
-  type Buyback,
-} from "@/lib/mock-data";
+import type {
+  DeadCoin,
+  RevivalCampaign,
+  Bounty,
+  Contributor,
+  Buyback,
+} from "@/lib/types";
 import type { BountyCategory, BountyStatus, DeadCoinStatus, RevivalPhase } from "@/lib/domain";
 import { safeHttpUrl } from "@/lib/utils";
+
+// Zeroed metrics: real counts are filled in by getGlobalMetrics; untracked
+// fields stay at zero rather than showing invented numbers.
+const EMPTY_GLOBAL_METRICS = {
+  deadCoinsSubmitted: 0,
+  coinsReviewed: 0,
+  coinsRevived: 0,
+  activeRevivals: 0,
+  graduatedRevivals: 0,
+  failedRevivals: 0,
+  bountiesCreated: 0,
+  bountiesCompleted: 0,
+  rewardsPaid: 0,
+  contributors: 0,
+  guilds: 0,
+  memesCreated: 0,
+  websitesRebuilt: 0,
+  videosCreated: 0,
+  communitiesRelaunched: 0,
+  totalFeesCollected: 0,
+  totalTokenBought: 0,
+  totalTokenBurned: 0,
+  totalTokenRecycled: 0,
+};
 
 const AVATAR_PALETTE = ["#2dd47e", "#9b7bff", "#f5b54a", "#ff5d6c", "#4ab5f5"];
 function avatarColor(seed: string) {
@@ -173,14 +190,14 @@ function mapBuyback(row: any): Buyback {
 // Dead coins
 // ----------------------------------------------------------------------------
 export async function getDeadCoins(): Promise<DeadCoin[]> {
-  if (!isConfigured()) return mockDeadCoins;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data: coins, error } = await sb
       .from("dead_coins")
       .select("*")
       .order("revival_score", { ascending: false });
-    if (error || !coins) return mockDeadCoins;
+    if (error || !coins) return [];
     // Only resolve usernames for the submitters we actually display.
     const submitterIds = [...new Set(coins.map((c) => c.submitted_by).filter(Boolean))];
     const { data: users } = submitterIds.length
@@ -189,12 +206,12 @@ export async function getDeadCoins(): Promise<DeadCoin[]> {
     const nameById = new Map((users ?? []).map((u) => [u.id, u.username as string]));
     return coins.map((c) => mapDeadCoin(c, nameById.get(c.submitted_by) ?? "—"));
   } catch {
-    return mockDeadCoins;
+    return [];
   }
 }
 
 export async function getDeadCoinById(id: string): Promise<DeadCoin | undefined> {
-  if (!isConfigured()) return mockDeadCoins.find((c) => c.id === id);
+  if (!isConfigured()) return undefined;
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("dead_coins").select("*").eq("id", id).maybeSingle();
@@ -206,7 +223,7 @@ export async function getDeadCoinById(id: string): Promise<DeadCoin | undefined>
     }
     return mapDeadCoin(data, submitter);
   } catch {
-    return mockDeadCoins.find((c) => c.id === id);
+    return undefined;
   }
 }
 
@@ -219,6 +236,12 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
     id: row.mint,
     source: "pump.fun",
     mint: row.mint,
+    holderCount: row.holder_count ?? null,
+    lifetimeVolumeUsd: row.lifetime_volume_usd == null ? null : Number(row.lifetime_volume_usd),
+    lifetimeVolumeSource: row.lifetime_volume_source ?? "",
+    isGem: Boolean(row.is_gem),
+    gemScore: row.gem_score ?? 0,
+    gemReasons: row.gem_reasons ?? [],
     name: row.name,
     symbol: row.symbol,
     description: row.description ?? "",
@@ -255,6 +278,13 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+// Only surface tokens that have real artwork — never show a token with a
+// missing pfp anywhere on the site. imageUrl is already sanitized to http(s)
+// upstream, so a non-empty value here means a usable image source.
+function hasArtwork(token: DiscoveredDeadToken): boolean {
+  return Boolean(token.imageUrl);
+}
+
 export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> {
   if (isConfigured()) {
     try {
@@ -263,9 +293,11 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
         .from("discovered_dead_tokens")
         .select("*")
         .in("status", ["candidate", "watchlist"])
+        .not("image_url", "is", null)
+        .neq("image_url", "")
         .order("qualification_score", { ascending: false })
         .limit(60);
-      if (!error && data && data.length > 0) return data.map(mapDiscoveredDeadToken);
+      if (!error && data && data.length > 0) return data.map(mapDiscoveredDeadToken).filter(hasArtwork);
     } catch {
       // Fall through to live discovery. The page should still render if the DB
       // table has not been migrated yet.
@@ -273,7 +305,7 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
   }
 
   try {
-    return await findDeadTokenCandidates(24);
+    return (await findDeadTokenCandidates(24)).filter(hasArtwork);
   } catch {
     return [];
   }
@@ -286,7 +318,7 @@ const CAMPAIGN_SELECT =
   "*, dead_coins(name, ticker, contract_address, revival_score), revival_campaign_guilds(guilds(slug))";
 
 export async function getCampaigns(): Promise<RevivalCampaign[]> {
-  if (!isConfigured()) return mockCampaigns;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb
@@ -294,15 +326,15 @@ export async function getCampaigns(): Promise<RevivalCampaign[]> {
       .select(CAMPAIGN_SELECT)
       .eq("status", "active")
       .order("start_date", { ascending: false });
-    if (error || !data) return mockCampaigns;
+    if (error || !data) return [];
     return data.map(mapCampaign);
   } catch {
-    return mockCampaigns;
+    return [];
   }
 }
 
 export async function getGraduatedCampaigns(): Promise<RevivalCampaign[]> {
-  if (!isConfigured()) return mockGraduated;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb
@@ -310,22 +342,22 @@ export async function getGraduatedCampaigns(): Promise<RevivalCampaign[]> {
       .select(CAMPAIGN_SELECT)
       .eq("status", "graduated")
       .order("graduation_date", { ascending: false });
-    if (error || !data) return mockGraduated;
+    if (error || !data) return [];
     return data.map(mapCampaign);
   } catch {
-    return mockGraduated;
+    return [];
   }
 }
 
 export async function getCampaignBySlug(slug: string): Promise<RevivalCampaign | undefined> {
-  if (!isConfigured()) return [...mockCampaigns, ...mockGraduated].find((c) => c.slug === slug);
+  if (!isConfigured()) return undefined;
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("revival_campaigns").select(CAMPAIGN_SELECT).eq("slug", slug).maybeSingle();
     if (error || !data) return undefined;
     return mapCampaign(data);
   } catch {
-    return [...mockCampaigns, ...mockGraduated].find((c) => c.slug === slug);
+    return undefined;
   }
 }
 
@@ -336,26 +368,26 @@ const BOUNTY_SELECT =
   "*, revival_campaigns(dead_coins(ticker)), submissions(count)";
 
 export async function getBounties(): Promise<Bounty[]> {
-  if (!isConfigured()) return mockBounties;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("bounties").select(BOUNTY_SELECT).order("created_at", { ascending: false });
-    if (error || !data) return mockBounties;
+    if (error || !data) return [];
     return data.map(mapBounty);
   } catch {
-    return mockBounties;
+    return [];
   }
 }
 
 export async function getBountyById(id: string): Promise<Bounty | undefined> {
-  if (!isConfigured()) return mockBounties.find((b) => b.id === id);
+  if (!isConfigured()) return undefined;
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("bounties").select(BOUNTY_SELECT).eq("id", id).maybeSingle();
     if (error || !data) return undefined;
     return mapBounty(data);
   } catch {
-    return mockBounties.find((b) => b.id === id);
+    return undefined;
   }
 }
 
@@ -370,29 +402,31 @@ export async function getCampaignBounties(campaignId: string): Promise<Bounty[]>
 const CONTRIB_SELECT = "*, guild_members(guilds(slug)), user_badges(badges(slug))";
 
 export async function getContributors(): Promise<Contributor[]> {
-  if (!isConfigured()) return mockContributors;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb
       .from("users")
       .select(CONTRIB_SELECT)
+      .not("username", "is", null)
       .order("reputation_score", { ascending: false });
-    if (error || !data) return mockContributors;
-    return data.map(mapContributor);
+    if (error || !data) return [];
+    // Only surface users who have a public contributor identity (username).
+    return data.filter((u) => u.username).map(mapContributor);
   } catch {
-    return mockContributors;
+    return [];
   }
 }
 
 export async function getContributorByUsername(username: string): Promise<Contributor | undefined> {
-  if (!isConfigured()) return mockContributors.find((c) => c.username === username);
+  if (!isConfigured()) return undefined;
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("users").select(CONTRIB_SELECT).eq("username", username).maybeSingle();
     if (error || !data) return undefined;
     return mapContributor(data);
   } catch {
-    return mockContributors.find((c) => c.username === username);
+    return undefined;
   }
 }
 
@@ -400,19 +434,19 @@ export async function getContributorByUsername(username: string): Promise<Contri
 // Buybacks
 // ----------------------------------------------------------------------------
 export async function getBuybacks(): Promise<Buyback[]> {
-  if (!isConfigured()) return mockBuybacks;
+  if (!isConfigured()) return [];
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("buybacks").select("*").order("occurred_at", { ascending: false });
-    if (error || !data) return mockBuybacks;
+    if (error || !data) return [];
     return data.map(mapBuyback);
   } catch {
-    return mockBuybacks;
+    return [];
   }
 }
 
 // ----------------------------------------------------------------------------
-// Guilds (DB identity + illustrative analytics overlay)
+// Guilds (DB identity + real member/bounty analytics)
 // ----------------------------------------------------------------------------
 export interface GuildWithStats {
   slug: string;
@@ -426,42 +460,42 @@ export interface GuildWithStats {
   winRate: number;
 }
 
+const EMPTY_GUILD_STATS = { members: 0, completedBounties: 0, totalEarned: 0, reputation: 0, winRate: 0 };
+
 export async function getGuilds(): Promise<GuildWithStats[]> {
   const { CORE_GUILDS } = await import("@/lib/domain");
-  const fallback = (): GuildWithStats[] =>
-    CORE_GUILDS.map((g) => ({ ...g, ...(mockGuildStats[g.slug] ?? { members: 0, completedBounties: 0, totalEarned: 0, reputation: 0, winRate: 0 }) }));
-  if (!isConfigured()) return fallback();
+  // Guild identity (name/category/description) is canonical product config, not
+  // mock data; only the analytics counters come from the DB.
+  const identityOnly = (): GuildWithStats[] => CORE_GUILDS.map((g) => ({ ...g, ...EMPTY_GUILD_STATS }));
+  if (!isConfigured()) return identityOnly();
   try {
     const sb = createSupabaseReadClient();
     const { data, error } = await sb.from("guilds").select("slug, name, category, description, guild_members(count)");
-    if (error || !data) return fallback();
+    if (error || !data) return identityOnly();
     return data.map((g) => {
-      const stats = mockGuildStats[g.slug] ?? { members: 0, completedBounties: 0, totalEarned: 0, reputation: 0, winRate: 0 };
-      // Use real member count when present, illustrative analytics otherwise.
       const guildMembers = g.guild_members as { count?: number }[] | null | undefined;
-      const realMembers = guildMembers?.[0]?.count ?? 0;
       return {
         slug: g.slug,
         name: g.name,
         category: g.category as BountyCategory,
         description: g.description ?? "",
-        members: realMembers || stats.members,
-        completedBounties: stats.completedBounties,
-        totalEarned: stats.totalEarned,
-        reputation: stats.reputation,
-        winRate: stats.winRate,
+        members: guildMembers?.[0]?.count ?? 0,
+        completedBounties: 0,
+        totalEarned: 0,
+        reputation: 0,
+        winRate: 0,
       };
     });
   } catch {
-    return fallback();
+    return identityOnly();
   }
 }
 
 // ----------------------------------------------------------------------------
-// Global metrics (real counts where cheap; illustrative for untracked)
+// Global metrics — real counts only. Untracked fields stay zero.
 // ----------------------------------------------------------------------------
 export async function getGlobalMetrics() {
-  if (!isConfigured()) return mockGlobalMetrics;
+  if (!isConfigured()) return EMPTY_GLOBAL_METRICS;
   try {
     const sb = createSupabaseReadClient();
     const [
@@ -496,7 +530,7 @@ export async function getGlobalMetrics() {
     const burned = buybackRows.filter((b) => b.status === "burned").reduce((s, b) => s + b.tokenAmount, 0);
     const recycled = buybackRows.filter((b) => b.status === "recycled").reduce((s, b) => s + b.tokenAmount, 0);
     return {
-      ...mockGlobalMetrics, // illustrative for untracked metrics (memes, videos, …)
+      ...EMPTY_GLOBAL_METRICS,
       deadCoinsSubmitted: submitted,
       activeRevivals: active,
       graduatedRevivals: graduated,
@@ -505,12 +539,13 @@ export async function getGlobalMetrics() {
       bountiesCreated,
       bountiesCompleted,
       contributors,
-      totalFeesCollected: fees || mockGlobalMetrics.totalFeesCollected,
-      totalTokenBought: bought || mockGlobalMetrics.totalTokenBought,
-      totalTokenBurned: burned || mockGlobalMetrics.totalTokenBurned,
-      totalTokenRecycled: recycled || mockGlobalMetrics.totalTokenRecycled,
+      rewardsPaid: bountiesCompleted ? fees : 0,
+      totalFeesCollected: fees,
+      totalTokenBought: bought,
+      totalTokenBurned: burned,
+      totalTokenRecycled: recycled,
     };
   } catch {
-    return mockGlobalMetrics;
+    return EMPTY_GLOBAL_METRICS;
   }
 }

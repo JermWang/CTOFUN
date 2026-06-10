@@ -131,13 +131,13 @@ export function SplashTokenCarousel({ tokens }: { tokens: ProtoCandidate[] }) {
       <div className="splash-wheel-scene">
         <div
           className="splash-wheel-ring"
-          style={{ transform: `translateZ(-220px) rotateY(${rotation}deg)` }}
+          style={{ transform: `translateZ(calc(-1 * var(--wheel-r, 220px))) rotateY(${rotation}deg)` }}
         >
           {cards.map((token, index) => (
             <div
               key={token.id}
               className={"splash-wheel-card" + (index === active ? " is-active" : "")}
-              style={{ transform: `rotateY(${index * angle}deg) translateZ(220px)` }}
+              style={{ transform: `rotateY(${index * angle}deg) translateZ(var(--wheel-r, 220px))` }}
               aria-current={index === active ? "true" : undefined}
               aria-hidden={index === active ? undefined : "true"}
             >

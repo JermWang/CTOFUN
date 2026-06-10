@@ -77,9 +77,9 @@ export function AsciiShader({
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      if (now - last < 180) return;
+      if (now - last < 110) return;
       last = now;
-      if (!reduce) t += 0.018;
+      if (!reduce) t += 0.055;
 
       let out = "";
       for (let y = 0; y < rows; y++) {

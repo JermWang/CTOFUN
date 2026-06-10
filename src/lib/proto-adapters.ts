@@ -1,10 +1,10 @@
 // ============================================================================
-// Adapters that map the live data model (mock-data.ts / dead-token-sweeper.ts)
+// Adapters that map the live data model (types.ts / dead-token-sweeper.ts)
 // onto the shapes the faithful "Liquid" prototype components expect. Keeps the
 // design pixel-faithful while staying driven by real getters.
 // ============================================================================
 
-import type { Bounty, DeadCoin, RevivalCampaign } from "@/lib/mock-data";
+import type { Bounty, DeadCoin, RevivalCampaign } from "@/lib/types";
 import type { DiscoveredDeadToken } from "@/lib/dead-token-sweeper";
 import { BOUNTY_CATEGORY_LABELS, REVIVAL_PHASES, type RevivalPhase } from "@/lib/domain";
 import type { ProtoBounty, ProtoCandidate } from "@/components/protocol-blocks";
@@ -102,8 +102,12 @@ export function toProtoCandidate(t: DiscoveredDeadToken): ProtoCandidate {
     categories: t.categories,
     categoryConfidence: t.categoryConfidence,
     discoverySignals: t.discoverySignals,
-    reasons: (t.qualificationReasons ?? []).slice(0, 3),
+    reasons: (t.isGem && t.gemReasons.length > 0 ? t.gemReasons : t.qualificationReasons ?? []).slice(0, 3),
     pumpUrl: t.pumpUrl,
+    holders: t.holderCount,
+    lifetimeVolumeUsd: t.lifetimeVolumeUsd,
+    gem: t.isGem,
+    gemScore: t.gemScore,
   };
 }
 

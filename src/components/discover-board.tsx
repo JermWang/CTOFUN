@@ -8,11 +8,13 @@ import {
   ArrowUpRight,
   Clock3,
   Flame,
+  Gem,
   Grid2X2,
   MessageCircle,
   Rows3,
   Search,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import type { ProtoCandidate } from "@/components/protocol-blocks";
 import { MEME_CATEGORY_LABELS } from "@/lib/domain";
@@ -20,6 +22,7 @@ import { fmtNum, fmtUsd } from "@/lib/format";
 
 const FILTERS = [
   { k: "all", label: "All dead coins" },
+  { k: "gems", label: "Gems" },
   { k: "dormant", label: "Dormant" },
   { k: "graduated", label: "Graduated" },
   { k: "heat", label: "Past heat" },
@@ -95,6 +98,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
     const needle = q.trim().toLowerCase();
     return candidates
       .filter((c) => {
+        if (filter === "gems" && !c.gem) return false;
         if (filter === "dormant" && c.dormant < 150) return false;
         if (filter === "graduated" && !c.migrated) return false;
         if (filter === "heat" && (c.ath ?? 0) < 50_000 && c.replies < 250) return false;
@@ -238,6 +242,8 @@ function metricFor(c: ProtoCandidate, sort: SortKey): number {
   if (sort === "ath") return c.ath ?? 0;
   if (sort === "dormant") return c.dormant ?? 0;
   if (sort === "replies") return c.replies ?? 0;
+  // Best match: verified gems outrank everything, ordered by gem score.
+  if (c.gem) return 1_000 + (c.gemScore ?? 0);
   return c.qual ?? 0;
 }
 
@@ -273,7 +279,13 @@ export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
       <div className="discover-art">
         <TokenImage c={c} />
         <div className="discover-score">Fit</div>
-        {c.migrated && <div className="discover-live">Graduated</div>}
+        {c.gem ? (
+          <div className="discover-gem">
+            <Gem size={11} /> Gem
+          </div>
+        ) : (
+          c.migrated && <div className="discover-live">Graduated</div>
+        )}
       </div>
 
       <div className="discover-card-body">
@@ -289,9 +301,16 @@ export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
           <span>
             <Clock3 size={13} /> {c.dormant}d
           </span>
-          <span>
-            <MessageCircle size={13} /> {fmtNum(c.replies)}
-          </span>
+          {c.holders != null ? (
+            <span>
+              <Users size={13} /> {fmtNum(c.holders)}
+              {c.holders >= 1000 ? "+" : ""}
+            </span>
+          ) : (
+            <span>
+              <MessageCircle size={13} /> {fmtNum(c.replies)}
+            </span>
+          )}
           <span>
             <ShieldCheck size={13} /> {c.risk}
           </span>

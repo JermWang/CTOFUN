@@ -581,17 +581,24 @@ body:has(.splash-home) footer.proto {
 
 .splash-carousel-shell {
   min-width: 0;
+  /* Center the wheel against the headline + tagline block, not the column top. */
+  align-self: center;
 }
 
 .splash-token-wheel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 360px;
+  /* Ring radius + card scale drive the whole 3D composition; media queries
+     retune them so the wheel fills its column without crowding the headline. */
+  --wheel-r: 248px;
+  --wheel-scale: 0.78;
+  /* Deterministic box: the active card's footprint (378px * scale) plus room
+     for the rotating side cards and the hint below. A fixed height lets the
+     grid's align-items:center line the card's true center up with the title. */
+  position: relative;
+  display: block;
+  height: calc(378px * var(--wheel-scale) + 92px);
   overflow: visible;
   padding: 0;
   outline: none;
-  position: relative;
 }
 
 .splash-token-wheel:focus-visible {
@@ -599,22 +606,11 @@ body:has(.splash-home) footer.proto {
   outline-offset: 12px;
 }
 
-.splash-wheel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  position: relative;
-  z-index: 2;
-}
-
 .splash-wheel-scene {
-  flex: 1;
-  min-height: 0;
-  margin-top: 0;
+  position: absolute;
+  inset: 0;
   perspective: 860px;
   perspective-origin: 50% 50%;
-  position: relative;
 }
 
 .splash-wheel-ring {
@@ -627,18 +623,20 @@ body:has(.splash-home) footer.proto {
 
 .splash-wheel-card {
   backface-visibility: hidden;
-  height: 330px;
-  left: calc(50% - 92px);
+  /* 270 x 378 is the unscaled discover-card footprint (5/7 aspect); centering
+     the box on the scene's midpoint keeps the active card optically centered. */
+  height: calc(378px * var(--wheel-scale));
+  left: calc(50% - 135px * var(--wheel-scale));
   opacity: 0.38;
   overflow: visible;
   padding: 0;
   pointer-events: none;
   position: absolute;
-  top: calc(50% - 132px);
+  top: calc(50% - 189px * var(--wheel-scale));
   transform-style: preserve-3d;
   transition:
     opacity 220ms ease;
-  width: 184px;
+  width: calc(270px * var(--wheel-scale));
 }
 
 .splash-wheel-card::before {
@@ -646,19 +644,23 @@ body:has(.splash-home) footer.proto {
 }
 
 .splash-wheel-card .discover-card {
-  transform: scale(0.68);
+  transform: scale(var(--wheel-scale));
   transform-origin: top center;
   width: 270px;
+  /* No blur of any kind inside the wheel: flat material, crisp borders. */
+  backdrop-filter: none;
+  box-shadow: none;
+  filter: none;
 }
 
 .splash-wheel-card .discover-card:hover {
-  transform: scale(0.68) translateY(-3px);
+  transform: scale(var(--wheel-scale)) translateY(-3px);
+  box-shadow: none;
 }
 
 .splash-wheel-card.is-active .discover-card {
   border-color: rgba(0, 191, 122, 0.32) !important;
-  box-shadow:
-    0 24px 60px -36px rgba(0, 191, 122, 0.48);
+  box-shadow: none;
 }
 
 .splash-wheel-card.is-active {
@@ -712,24 +714,28 @@ body:has(.splash-home) footer.proto {
   }
 }
 
+/* Wide screens: the column is at its 526px max — let the wheel breathe. */
+@media (min-width: 1280px) {
+  .splash-token-wheel {
+    --wheel-r: 264px;
+    --wheel-scale: 0.82;
+  }
+}
+
+/* Narrow desktops: the column shrinks toward ~430px — pull the ring in so
+   side cards stay clear of the headline column. */
+@media (min-width: 921px) and (max-width: 1120px) {
+  .splash-token-wheel {
+    --wheel-r: 214px;
+    --wheel-scale: 0.68;
+  }
+}
+
+/* Short viewports trump width tuning: keep the wheel compact. */
 @media (max-height: 760px) and (min-width: 921px) {
   .splash-token-wheel {
-    min-height: 320px;
-  }
-
-  .splash-wheel-card {
-    left: calc(50% - 84px);
-    top: calc(50% - 122px);
-    width: 168px;
-  }
-
-  .splash-wheel-card .discover-card {
-    transform: scale(0.62);
-    width: 270px;
-  }
-
-  .splash-wheel-card .discover-card:hover {
-    transform: scale(0.62) translateY(-3px);
+    --wheel-r: 216px;
+    --wheel-scale: 0.7;
   }
 }
 
@@ -769,16 +775,20 @@ body:has(.splash-home) footer.proto {
 }
 
 /* Wordless scroll affordance: a hairline track with a glint that tracks the
-   active card, so the wheel reads as movable without any chrome. */
+   active card, so the wheel reads as movable without any chrome. Anchored to
+   the card cluster so the cards keep true optical center in the column. */
 .splash-wheel-hint {
-  position: relative;
+  position: absolute;
   z-index: 2;
+  top: calc(50% + 189px * var(--wheel-scale, 0.78) + 34px);
+  left: 50%;
   width: 56px;
   height: 2px;
-  margin: 16px auto 0;
+  margin: 0;
   border-radius: 999px;
   background: rgba(13, 31, 24, 0.1);
   opacity: 0.7;
+  transform: translateX(-50%);
   transition: opacity 220ms ease;
 }
 
@@ -1335,6 +1345,23 @@ body:has(.splash-home) footer.proto {
 .discover-live {
   right: 9px;
   bottom: 9px;
+  padding: 6px 9px;
+  color: var(--green-dim);
+  font: 800 10px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.discover-gem {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 191, 122, 0.4);
+  background: #ffffff;
   padding: 6px 9px;
   color: var(--green-dim);
   font: 800 10px var(--mono);

@@ -198,6 +198,10 @@ export interface ProtoCandidate {
   discoverySignals?: string[];
   reasons: string[];
   pumpUrl?: string;
+  holders?: number | null;
+  lifetimeVolumeUsd?: number | null;
+  gem?: boolean;
+  gemScore?: number;
 }
 
 export function CandidateCard({ c, href }: { c: ProtoCandidate; href: string }) {

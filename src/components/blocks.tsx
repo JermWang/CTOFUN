@@ -13,7 +13,7 @@ import {
   type DeadCoinStatus,
   type RevivalPhase,
 } from "@/lib/domain";
-import type { Bounty, DeadCoin } from "@/lib/mock-data";
+import type { Bounty, DeadCoin } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Score helpers
