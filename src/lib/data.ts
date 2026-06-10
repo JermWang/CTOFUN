@@ -15,7 +15,12 @@ import {
   type DiscoveredDeadToken,
   type PumpTokenLookup,
 } from "@/lib/dead-token-sweeper";
-import { applyPriorityOg2024Metadata, isPriorityOg2024Mint, priorityOg2024Rank } from "@/lib/priority-tokens";
+import {
+  applyPriorityOg2024Metadata,
+  isPriorityOg2024Mint,
+  priorityOg2024Rank,
+  PRIORITY_OG_2024_MINTS,
+} from "@/lib/priority-tokens";
 import type {
   DeadCoin,
   RevivalCampaign,
@@ -326,6 +331,19 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
           ...data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken).slice(0, DISCOVERED_TOKEN_TARGET),
         );
       }
+      const { data: priorityData, error: priorityError } = await sb
+        .from("discovered_dead_tokens")
+        .select("*")
+        .in("status", ["candidate", "watchlist", "targeted"])
+        .in("mint", [...PRIORITY_OG_2024_MINTS])
+        .not("image_url", "is", null)
+        .neq("image_url", "");
+      if (!priorityError && priorityData && priorityData.length > 0) {
+        const seen = new Set(storedTokens.map((token) => token.mint));
+        for (const token of priorityData.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken)) {
+          if (!seen.has(token.mint)) storedTokens.push(token);
+        }
+      }
     } catch {
       // Fall through to live discovery. The page should still render if the DB
       // table has not been migrated yet.
@@ -364,7 +382,19 @@ export async function getStoredDiscoveredDeadTokens(limit = 40): Promise<Discove
       .order("qualification_score", { ascending: false })
       .limit(limit);
     if (error || !data) return [];
-    return sortDiscoveredTokens(data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken)).slice(0, limit);
+    const tokens = data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken);
+    const { data: priorityData } = await sb
+      .from("discovered_dead_tokens")
+      .select("*")
+      .in("status", ["candidate", "watchlist", "targeted"])
+      .in("mint", [...PRIORITY_OG_2024_MINTS])
+      .not("image_url", "is", null)
+      .neq("image_url", "");
+    const seen = new Set(tokens.map((token) => token.mint));
+    for (const token of (priorityData ?? []).map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken)) {
+      if (!seen.has(token.mint)) tokens.push(token);
+    }
+    return sortDiscoveredTokens(tokens).slice(0, limit);
   } catch {
     return [];
   }

@@ -23,6 +23,7 @@ import { fmtNum, fmtUsd } from "@/lib/format";
 const FILTERS = [
   { k: "all", label: "All dead coins" },
   { k: "targets", label: "Revival targets" },
+  { k: "og2024", label: "OG 2024" },
   { k: "gems", label: "Gems" },
   { k: "dormant", label: "Dormant" },
   { k: "graduated", label: "Graduated" },
@@ -103,6 +104,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
       .filter((c) => {
         if (filter === "gems" && !c.gem) return false;
         if (filter === "targets" && !c.revivalTarget) return false;
+        if (filter === "og2024" && !isPriorityOg2024Candidate(c)) return false;
         if (filter === "dormant" && c.dormant < 150) return false;
         if (filter === "graduated" && !c.migrated) return false;
         if (filter === "heat" && (c.ath ?? 0) < 50_000 && c.replies < 250) return false;
@@ -246,6 +248,7 @@ function metricFor(c: ProtoCandidate, sort: SortKey): number {
   if (sort === "ath") return c.ath ?? 0;
   if (sort === "dormant") return c.dormant ?? 0;
   if (sort === "replies") return c.replies ?? 0;
+  if (isPriorityOg2024Candidate(c)) return 3_000 + (c.qual ?? 0);
   if (c.revivalTarget) return 2_000 + (c.gemScore ?? c.qual ?? 0);
   // Best match: verified gems outrank everything, ordered by gem score.
   if (c.gem) return 1_000 + (c.gemScore ?? 0);
@@ -447,7 +450,15 @@ function ExternalCoinLink({ href, label }: { href?: string; label: string }) {
 }
 
 function isDisplayableToken(c: ProtoCandidate): boolean {
-  return typeof c.imageUrl === "string" && c.imageUrl.trim().length > 0 && c.mcap >= MIN_DISPLAY_MARKET_CAP_USD;
+  return (
+    typeof c.imageUrl === "string" &&
+    c.imageUrl.trim().length > 0 &&
+    (isPriorityOg2024Candidate(c) || c.mcap >= MIN_DISPLAY_MARKET_CAP_USD)
+  );
+}
+
+function isPriorityOg2024Candidate(c: ProtoCandidate): boolean {
+  return (c.categories ?? []).includes("og2024");
 }
 
 function TokenImage({ c, onImageError }: { c: ProtoCandidate; onImageError: () => void }) {
