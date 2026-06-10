@@ -19,16 +19,16 @@ export default function AdminPage() {
             ADMIN · REVIVAL REVIEW
           </div>
           <h1 style={{ fontSize: 32, fontWeight: 650, letterSpacing: "-.02em", margin: "12px 0 6px" }}>
-            Vet teams, fund bounties, record payouts
+            Choose targets, vet teams, record payouts
           </h1>
           <p style={{ color: "var(--dim)", maxWidth: 560, lineHeight: 1.6 }}>
-            Approve a team and set its SOL bounty, mark the Pump.fun bounty funded, then record the payout once the
-            revival is delivered. Visible to admin wallets only.
+            Mark which tokens the community wants revived, approve one team to lead, then manually create/fund the
+            bounty and record the payout transaction after delivery. Visible to admin wallets only.
           </p>
         </div>
       </section>
 
-      <section className="section tight wrap" style={{ maxWidth: 820 }}>
+      <section className="section tight wrap" style={{ maxWidth: 1040 }}>
         <AdminReviewPanel />
       </section>
     </div>

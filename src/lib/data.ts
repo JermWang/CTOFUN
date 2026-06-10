@@ -282,6 +282,8 @@ function mapDiscoveredDeadToken(row: any): DiscoveredDeadToken {
     revivalScore: row.revival_score ?? 0,
     qualificationReasons: row.qualification_reasons ?? [],
     status: row.status ?? "candidate",
+    revivalTargetedAt: row.revival_targeted_at ?? "",
+    revivalTargetNotes: row.revival_target_notes ?? "",
     sweptAt: row.swept_at ?? "",
   };
 }
@@ -309,7 +311,7 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
       const { data, error } = await sb
         .from("discovered_dead_tokens")
         .select("*")
-        .in("status", ["candidate", "watchlist"])
+        .in("status", ["candidate", "watchlist", "targeted"])
         .not("image_url", "is", null)
         .neq("image_url", "")
         .gte("market_cap_usd", minMarketCap)
@@ -319,7 +321,7 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
         storedTokens.push(
           ...data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken).slice(0, DISCOVERED_TOKEN_TARGET),
         );
-        if (storedTokens.length >= DISCOVERED_TOKEN_TARGET) return storedTokens;
+        if (storedTokens.length >= DISCOVERED_TOKEN_TARGET) return sortDiscoveredTokens(storedTokens);
       }
     } catch {
       // Fall through to live discovery. The page should still render if the DB
@@ -334,10 +336,19 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
       if (!byMint.has(token.mint)) byMint.set(token.mint, token);
       if (byMint.size >= DISCOVERED_TOKEN_TARGET) break;
     }
-    return [...byMint.values()].slice(0, DISCOVERED_TOKEN_TARGET);
+    return sortDiscoveredTokens([...byMint.values()]).slice(0, DISCOVERED_TOKEN_TARGET);
   } catch {
-    return storedTokens;
+    return sortDiscoveredTokens(storedTokens);
   }
+}
+
+function sortDiscoveredTokens(tokens: DiscoveredDeadToken[]): DiscoveredDeadToken[] {
+  return [...tokens].sort((a, b) => {
+    if (a.status === "targeted" && b.status !== "targeted") return -1;
+    if (a.status !== "targeted" && b.status === "targeted") return 1;
+    if (a.isGem !== b.isGem) return a.isGem ? -1 : 1;
+    return b.qualificationScore - a.qualificationScore;
+  });
 }
 
 export async function getDiscoveredTokenByMint(mint: string): Promise<DiscoveredDeadToken | undefined> {
@@ -359,6 +370,27 @@ export async function getDiscoveredTokenByMint(mint: string): Promise<Discovered
     return (await findDeadTokenCandidates(DISCOVERED_TOKEN_TARGET)).find((t) => t.mint === mint);
   } catch {
     return undefined;
+  }
+}
+
+/** Admin target queue: discovered tokens that can be marked as revival targets. */
+export async function getDiscoveredTokensForReview(): Promise<DiscoveredDeadToken[]> {
+  if (!isConfigured()) return [];
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("discovered_dead_tokens")
+      .select("*")
+      .in("status", ["candidate", "watchlist", "targeted"])
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .gte("market_cap_usd", minDeadTokenMarketCapUsd())
+      .order("qualification_score", { ascending: false })
+      .limit(80);
+    if (error || !data) return [];
+    return sortDiscoveredTokens(data.map(mapDiscoveredDeadToken).filter(isDisplayableDeadToken)).slice(0, 40);
+  } catch {
+    return [];
   }
 }
 

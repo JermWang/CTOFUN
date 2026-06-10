@@ -44,7 +44,9 @@ export interface DiscoveredDeadToken {
   qualificationScore: number;
   revivalScore: number;
   qualificationReasons: string[];
-  status: "candidate" | "watchlist" | "rejected" | "imported";
+  status: "candidate" | "watchlist" | "targeted" | "rejected" | "imported";
+  revivalTargetedAt?: string;
+  revivalTargetNotes?: string;
   sweptAt: string;
 }
 
@@ -919,7 +921,6 @@ export async function sweepDeadTokenCandidates(limit = 60) {
     qualification_score: candidate.qualificationScore,
     revival_score: candidate.revivalScore,
     qualification_reasons: candidate.qualificationReasons,
-    status: candidate.status,
     swept_at: candidate.sweptAt,
     raw_source: candidate,
   }));

@@ -202,6 +202,9 @@ export interface ProtoCandidate {
   lifetimeVolumeUsd?: number | null;
   gem?: boolean;
   gemScore?: number;
+  revivalTarget?: boolean;
+  revivalTargetedAt?: string;
+  revivalTargetNotes?: string;
 }
 
 export function CandidateCard({ c, href }: { c: ProtoCandidate; href: string }) {

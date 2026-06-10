@@ -94,6 +94,9 @@ export function toProtoCandidate(t: DiscoveredDeadToken): ProtoCandidate {
     lifetimeVolumeUsd: t.lifetimeVolumeUsd,
     gem: t.isGem,
     gemScore: t.gemScore,
+    revivalTarget: t.status === "targeted",
+    revivalTargetedAt: t.revivalTargetedAt,
+    revivalTargetNotes: t.revivalTargetNotes,
   };
 }
 

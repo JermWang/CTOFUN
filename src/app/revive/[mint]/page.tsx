@@ -92,6 +92,17 @@ export default async function RevivePage({ params }: { params: Promise<{ mint: s
       </section>
 
       <section className="section tight wrap" style={{ maxWidth: 760 }}>
+        {token.status === "targeted" && !selected && (
+          <div className="lq-soft" style={{ padding: 18, marginBottom: 16 }}>
+            <div className="eyebrow" style={{ letterSpacing: ".16em", color: "var(--violet)" }}>
+              REVIVAL TARGET
+            </div>
+            <p style={{ fontSize: 13.5, color: "var(--dim)", lineHeight: 1.6, margin: "8px 0 0" }}>
+              The community has marked ${token.symbol} as a priority revival. Teams can apply here; CTO.fun still
+              reviews teams manually before any bounty is created or paid.
+            </p>
+          </div>
+        )}
         {selected ? (
           <div className="lq-soft" style={{ padding: 24 }}>
             <div className="eyebrow" style={{ letterSpacing: ".16em", color: "var(--green-dim)" }}>

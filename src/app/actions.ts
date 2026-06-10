@@ -5,7 +5,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getOrCreateUser, isAdmin } from "@/lib/auth";
-import { getApplicationsForReview } from "@/lib/data";
+import { getApplicationsForReview, getDiscoveredTokensForReview } from "@/lib/data";
 import { MEME_CATEGORIES } from "@/lib/domain";
 import {
   collectPumpCreatorFees,
@@ -14,6 +14,7 @@ import {
   type CreatorFeeAutomationStatus,
 } from "@/lib/pumpportal";
 import type { RevivalApplication } from "@/lib/types";
+import type { DiscoveredDeadToken } from "@/lib/dead-token-sweeper";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -420,6 +421,76 @@ export async function getCreatorFeeAutomationStatus(
   } catch (e) {
     logActionError("getCreatorFeeAutomationStatus", e);
     return { ok: false, error: "Could not load creator-fee automation status." };
+  }
+}
+
+/** Admin-only: load discovered tokens that can be publicly marked as revival targets. */
+export async function getRevivalTargetQueue(token: string | null): Promise<ActionResult<DiscoveredDeadToken[]>> {
+  try {
+    const auth = await requireAdmin(token);
+    if (!auth.ok) return { ok: false, error: auth.error };
+    return { ok: true, data: await getDiscoveredTokensForReview() };
+  } catch (e) {
+    logActionError("getRevivalTargetQueue", e);
+    return { ok: false, error: "Could not load revival targets." };
+  }
+}
+
+export interface SetRevivalTargetInput {
+  mint: string;
+  targeted: boolean;
+  notes?: string;
+}
+
+/** Admin-only: mark or unmark a discovered token as a public revival target. */
+export async function setRevivalTarget(
+  token: string | null,
+  input: SetRevivalTargetInput,
+): Promise<ActionResult> {
+  try {
+    const auth = await requireAdmin(token);
+    if (!auth.ok) return { ok: false, error: auth.error };
+    const mint = cleanText(input.mint, 64);
+    if (!mint) return { ok: false, error: "Missing token mint." };
+
+    const admin = createSupabaseAdminClient();
+    const { data: row, error: readError } = await admin
+      .from("discovered_dead_tokens")
+      .select("mint,status")
+      .eq("mint", mint)
+      .maybeSingle();
+    if (readError) {
+      logActionError("setRevivalTarget:read", readError);
+      return { ok: false, error: "Could not load that token." };
+    }
+    if (!row) return { ok: false, error: "Token not found in discovery." };
+
+    const patch = input.targeted
+      ? {
+          status: "targeted",
+          revival_targeted_at: new Date().toISOString(),
+          revival_targeted_by: auth.user.id,
+          revival_target_notes: cleanText(input.notes, 500) || null,
+        }
+      : {
+          status: row.status === "targeted" ? "candidate" : row.status,
+          revival_targeted_at: null,
+          revival_targeted_by: null,
+          revival_target_notes: null,
+        };
+
+    const { error } = await admin.from("discovered_dead_tokens").update(patch).eq("mint", mint);
+    if (error) {
+      logActionError("setRevivalTarget:update", error);
+      return { ok: false, error: "Could not update the revival target." };
+    }
+    revalidatePath("/admin");
+    revalidatePath("/discover");
+    revalidatePath(`/revive/${mint}`);
+    return { ok: true };
+  } catch (e) {
+    logActionError("setRevivalTarget", e);
+    return { ok: false, error: "Could not update the revival target." };
   }
 }
 

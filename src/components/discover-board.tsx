@@ -10,6 +10,7 @@ import {
   Gem,
   Grid2X2,
   MessageCircle,
+  Pin,
   Rows3,
   Search,
   ShieldCheck,
@@ -21,6 +22,7 @@ import { fmtNum, fmtUsd } from "@/lib/format";
 
 const FILTERS = [
   { k: "all", label: "All dead coins" },
+  { k: "targets", label: "Revival targets" },
   { k: "gems", label: "Gems" },
   { k: "dormant", label: "Dormant" },
   { k: "graduated", label: "Graduated" },
@@ -100,6 +102,7 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
     return displayCandidates
       .filter((c) => {
         if (filter === "gems" && !c.gem) return false;
+        if (filter === "targets" && !c.revivalTarget) return false;
         if (filter === "dormant" && c.dormant < 150) return false;
         if (filter === "graduated" && !c.migrated) return false;
         if (filter === "heat" && (c.ath ?? 0) < 50_000 && c.replies < 250) return false;
@@ -162,8 +165,8 @@ export function DiscoverBoard({ candidates }: { candidates: ProtoCandidate[] }) 
         </div>
         <div className="discover-strip-stats">
           <StatPill label="Candidates" value={fmtNum(displayCandidates.length)} />
+          <StatPill label="Targets" value={fmtNum(displayCandidates.filter((c) => c.revivalTarget).length)} />
           <StatPill label="Qualified" value={fmtNum(displayCandidates.filter((c) => c.qual >= 60).length)} />
-          <StatPill label="Categories" value={fmtNum(categoryFilters.length)} />
         </div>
       </div>
 
@@ -243,6 +246,7 @@ function metricFor(c: ProtoCandidate, sort: SortKey): number {
   if (sort === "ath") return c.ath ?? 0;
   if (sort === "dormant") return c.dormant ?? 0;
   if (sort === "replies") return c.replies ?? 0;
+  if (c.revivalTarget) return 2_000 + (c.gemScore ?? c.qual ?? 0);
   // Best match: verified gems outrank everything, ordered by gem score.
   if (c.gem) return 1_000 + (c.gemScore ?? 0);
   return c.qual ?? 0;
@@ -266,7 +270,7 @@ function FeaturedCoin({ c }: { c: ProtoCandidate }) {
     <Link className="discover-feature-card" href={`/revive/${c.id}`}>
       <TokenImage c={c} onImageError={() => setImageFailed(true)} />
       <div>
-        <span className="discover-chip">Top revival fit</span>
+        <span className="discover-chip">{c.revivalTarget ? "Revival target" : "Top revival fit"}</span>
         <h3>{c.name}</h3>
         <p>
           ${c.sym} / {fmtUsd(c.mcap)} MC / {c.dormant}d dormant
@@ -302,7 +306,11 @@ export function DiscoverCoinCard({
           }}
         />
         <div className="discover-score">Fit</div>
-        {c.gem ? (
+        {c.revivalTarget ? (
+          <div className="discover-target">
+            <Pin size={11} /> Target
+          </div>
+        ) : c.gem ? (
           <div className="discover-gem">
             <Gem size={11} /> Gem
           </div>
@@ -392,6 +400,7 @@ function DiscoverCoinRow({ c }: { c: ProtoCandidate }) {
         <h3>{c.name}</h3>
         <p>
           ${c.sym}
+          {c.revivalTarget && <span className="discover-row-flag target">Revival target</span>}
           {c.migrated && <span className="discover-row-flag">Graduated</span>}
         </p>
       </div>

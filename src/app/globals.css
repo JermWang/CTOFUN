@@ -1349,7 +1349,8 @@ body:has(.splash-home) footer.proto {
 }
 
 .discover-score,
-.discover-live {
+.discover-live,
+.discover-target {
   position: absolute;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.75);
@@ -1371,6 +1372,21 @@ body:has(.splash-home) footer.proto {
   bottom: 9px;
   padding: 6px 9px;
   color: var(--green-dim);
+  font: 800 10px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.discover-target {
+  right: 9px;
+  bottom: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-color: rgba(118, 92, 255, 0.34);
+  background: #ffffff;
+  color: var(--violet);
+  padding: 6px 9px;
   font: 800 10px var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1690,6 +1706,163 @@ body:has(.splash-home) footer.proto {
   font: 700 9px var(--mono);
 }
 
+.discover-row-flag.target {
+  border-color: rgba(118, 92, 255, 0.28);
+  background: rgba(118, 92, 255, 0.1);
+  color: var(--violet);
+}
+
+.admin-review-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(13, 31, 24, 0.08);
+  background: rgba(255, 255, 255, 0.42);
+  padding: 14px;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-section-head strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.admin-section-head span {
+  display: block;
+  margin-top: 3px;
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.admin-count-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid rgba(13, 31, 24, 0.09);
+  background: rgba(255, 255, 255, 0.62);
+  padding: 6px 9px;
+  color: var(--green-deep) !important;
+  font: 750 11px var(--mono) !important;
+}
+
+.admin-target-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-target-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(13, 31, 24, 0.08);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 9px;
+}
+
+.admin-target-card.selected {
+  border-color: rgba(118, 92, 255, 0.32);
+  background: rgba(118, 92, 255, 0.08);
+}
+
+.admin-target-card img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.admin-target-main {
+  min-width: 0;
+}
+
+.admin-target-main strong,
+.admin-target-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-target-main strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.admin-target-main span {
+  display: block;
+  margin-top: 2px;
+  color: var(--green);
+  font-size: 10.5px;
+}
+
+.admin-target-main p {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-app-group {
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(13, 31, 24, 0.08);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.admin-app-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(13, 31, 24, 0.07);
+  padding: 12px 14px;
+}
+
+.admin-app-group-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.admin-app-group-head .mono {
+  margin-left: 8px;
+  color: var(--green);
+  font-size: 11px;
+}
+
+.admin-app-group-head > span {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.admin-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.admin-review-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(13, 31, 24, 0.07);
+  background: rgba(255, 255, 255, 0.48);
+  padding: 14px;
+}
+
 .discover-row-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1794,6 +1967,10 @@ body:has(.splash-home) footer.proto {
   .discover-strip-stats {
     justify-content: flex-start;
   }
+
+  .admin-target-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1835,6 +2012,25 @@ body:has(.splash-home) footer.proto {
 
   .discover-card-actions {
     flex-wrap: wrap;
+  }
+
+  .admin-section-head,
+  .admin-app-group-head {
+    flex-direction: column;
+  }
+
+  .admin-target-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .admin-target-card img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .admin-target-card button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }
 
