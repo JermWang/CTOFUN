@@ -212,8 +212,8 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
                 Ask the council to revive a token
               </h1>
               <p style={{ color: "var(--dim)", maxWidth: 620, lineHeight: 1.6 }}>
-                Paste a Solana mint, tell us why holders want it back, and submit. The server verifies your connected
-                wallet holds that exact SPL token before accepting the request.
+                Paste a Solana mint, tell us why holders want it back, and submit. Once the CTO token mint is configured,
+                the server verifies your connected wallet holds the required SPL token before accepting the request.
               </p>
             </div>
           </section>
@@ -248,8 +248,8 @@ export function SubmitFlow({ known }: { known: KnownToken[] }) {
                   <div className="lq-soft" style={{ padding: 14 }}>
                     <div style={{ fontSize: 14, fontWeight: 650 }}>Token-holder requests</div>
                     <p style={{ margin: "8px 0 0", color: "var(--dim)", fontSize: 12.5, lineHeight: 1.55 }}>
-                      Submissions require wallet login. Your connected Solana wallet must hold the token mint you are
-                      asking CTO.fun to revive.
+                      Submissions require wallet login. When `REVIVAL_REQUEST_TOKEN_MINT` is set, your connected Solana
+                      wallet must hold the configured SPL token.
                     </p>
                   </div>
                   {detected && (

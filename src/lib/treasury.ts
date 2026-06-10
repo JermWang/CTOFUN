@@ -44,7 +44,7 @@ function trimmed(value: string | undefined): string {
 export function treasuryConfig(): TreasuryConfig {
   return {
     wallet: trimmed(process.env.TREASURY_WALLET || process.env.NEXT_PUBLIC_TREASURY_WALLET),
-    ctoMint: trimmed(process.env.NEXT_PUBLIC_TOKEN_MINT),
+    ctoMint: trimmed(process.env.NEXT_PUBLIC_TOKEN_MINT || process.env.REVIVAL_REQUEST_TOKEN_MINT),
     pumpfunBountyApi: Boolean(trimmed(process.env.PUMPFUN_BOUNTY_API)),
     signerEnabled: process.env.TREASURY_SIGNER_ENABLED === "true",
   };
