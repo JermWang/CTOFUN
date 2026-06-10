@@ -21,6 +21,27 @@ export interface AuthedUser {
 }
 
 /**
+ * Admin allowlist. CTO.fun operators who can vet revival applications, assign
+ * bounties, and record payouts. Configured via env (comma-separated):
+ *   ADMIN_PRIVY_IDS  — Privy user ids
+ *   ADMIN_WALLETS    — Solana wallet addresses (case-insensitive)
+ * With neither set, no one is an admin (review surfaces stay locked).
+ */
+function allowlist(envValue: string | undefined): string[] {
+  return (envValue ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function isAdmin(user: Pick<AuthedUser, "privyId" | "wallet">): boolean {
+  const ids = allowlist(process.env.ADMIN_PRIVY_IDS);
+  if (ids.includes(user.privyId)) return true;
+  const wallets = allowlist(process.env.ADMIN_WALLETS).map((w) => w.toLowerCase());
+  return Boolean(user.wallet && wallets.includes(user.wallet.toLowerCase()));
+}
+
+/**
  * Verifies a Privy access token (sent from the client) and upserts the matching
  * row in `users`, returning the internal user. Throws if the token is missing
  * or invalid — callers should treat a throw as "unauthenticated".

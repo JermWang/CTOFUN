@@ -6,9 +6,9 @@ import { toProtoBounty } from "@/lib/proto-adapters";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Bounties — CTO Work Queue",
+  title: "Bounties — Get Funded to Revive",
   description:
-    "Funded takeover work. Pick up a bounty, submit proof, get paid on approval. A 5% fee funds token buybacks.",
+    "You don't pay to play. CTO.fun's token fees fund a SOL bounty for every revival. Prove your team, deliver the takeover, and the bounty is yours.",
 };
 
 export default async function BountiesPage() {

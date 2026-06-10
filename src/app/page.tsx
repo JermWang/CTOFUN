@@ -14,7 +14,9 @@ export default async function Home() {
     getDiscoveredDeadTokens(),
   ]);
 
-  const carouselTokens = discovered.slice(0, 5).map(toProtoCandidate);
+  // Hand the carousel a spare pool (not just the 5 visible): if a token's
+  // artwork 404s at runtime it's dropped and backfilled with a real one.
+  const carouselTokens = discovered.slice(0, 16).map(toProtoCandidate);
 
   return (
     <div className="proto splash-home">
@@ -33,8 +35,8 @@ export default async function Home() {
               <span style={{ color: "var(--green)" }}>back to life.</span>
             </h1>
             <p className="sub">
-              Discover dormant launches the market forgot. Fund the takeover through bounties. Track every revival as
-              public, on-chain proof.
+              Discover dormant launches the market forgot. Prove your team, get funded to lead the takeover, and earn
+              the bounty in SOL — every revival tracked as public, on-chain proof.
             </p>
             <div className="hero-ctas">
               <Link className="btn btn-solid" href="/discover">

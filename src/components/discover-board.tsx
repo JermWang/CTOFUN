@@ -263,7 +263,7 @@ function FeaturedCoin({ c }: { c: ProtoCandidate }) {
   if (!isDisplayableToken(c) || imageFailed) return null;
 
   return (
-    <Link className="discover-feature-card" href="/bounties">
+    <Link className="discover-feature-card" href={`/revive/${c.id}`}>
       <TokenImage c={c} onImageError={() => setImageFailed(true)} />
       <div>
         <span className="discover-chip">Top revival fit</span>
@@ -277,16 +277,30 @@ function FeaturedCoin({ c }: { c: ProtoCandidate }) {
   );
 }
 
-export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
+export function DiscoverCoinCard({
+  c,
+  onImageError,
+}: {
+  c: ProtoCandidate;
+  onImageError?: () => void;
+}) {
   const progress = Math.max(12, Math.min(100, c.qual));
   const [imageFailed, setImageFailed] = React.useState(false);
 
+  // A token whose artwork 404s is a dead/low-quality launch: drop the card
+  // entirely (no placeholder) and let the parent backfill a real token.
   if (!isDisplayableToken(c) || imageFailed) return null;
 
   return (
     <article className="discover-card">
       <div className="discover-art">
-        <TokenImage c={c} onImageError={() => setImageFailed(true)} />
+        <TokenImage
+          c={c}
+          onImageError={() => {
+            setImageFailed(true);
+            onImageError?.();
+          }}
+        />
         <div className="discover-score">Fit</div>
         {c.gem ? (
           <div className="discover-gem">
@@ -354,8 +368,8 @@ export function DiscoverCoinCard({ c }: { c: ProtoCandidate }) {
         <div className="discover-card-actions">
           <ExternalCoinLink href={c.pumpUrl} label="Pump" />
           <ExternalCoinLink href={c.chartUrl} label="Chart" />
-          <Link href="/bounties">
-            Fund CTO <ArrowUpRight size={13} />
+          <Link href={`/revive/${c.id}`}>
+            Apply to revive <ArrowUpRight size={13} />
           </Link>
         </div>
       </div>
@@ -397,8 +411,8 @@ function DiscoverCoinRow({ c }: { c: ProtoCandidate }) {
       <div className="discover-row-actions">
         <ExternalCoinLink href={c.pumpUrl} label="Pump" />
         <ExternalCoinLink href={c.chartUrl} label="Chart" />
-        <Link href="/bounties">
-          Fund CTO <ArrowUpRight size={13} />
+        <Link href={`/revive/${c.id}`}>
+          Apply to revive <ArrowUpRight size={13} />
         </Link>
       </div>
     </article>

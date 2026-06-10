@@ -8,8 +8,36 @@ import type {
   BountyCategory,
   BountyStatus,
   DeadCoinStatus,
+  RevivalApplicationStatus,
   RevivalPhase,
 } from "@/lib/domain";
+
+export interface RevivalApplication {
+  id: string;
+  mint: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenImageUrl: string;
+  teamName: string;
+  pitch: string;
+  plan: string;
+  teamSize: number;
+  teamMembers: string;
+  priorWork: string;
+  payoutWallet: string;
+  contact: string;
+  bountyAmountSol: number | null;
+  bountyPumpfunUrl: string;
+  deliveryProof: string;
+  deliveryLinks: string[];
+  deliveredAt: string;
+  payoutTx: string;
+  paidAmountSol: number | null;
+  paidAt: string;
+  reviewNotes: string;
+  status: RevivalApplicationStatus;
+  createdAt: string;
+}
 
 export interface DeadCoin {
   id: string;

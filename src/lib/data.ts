@@ -18,8 +18,16 @@ import type {
   Bounty,
   Contributor,
   Buyback,
+  RevivalApplication,
 } from "@/lib/types";
-import type { BountyCategory, BountyStatus, DeadCoinStatus, RevivalPhase } from "@/lib/domain";
+import type {
+  BountyCategory,
+  BountyStatus,
+  DeadCoinStatus,
+  RevivalApplicationStatus,
+  RevivalPhase,
+} from "@/lib/domain";
+import { ACTIVE_REVIVAL_STATUSES } from "@/lib/domain";
 import { safeHttpUrl } from "@/lib/utils";
 
 // Zeroed metrics: real counts are filled in by getGlobalMetrics; untracked
@@ -329,6 +337,163 @@ export async function getDiscoveredDeadTokens(): Promise<DiscoveredDeadToken[]> 
     return [...byMint.values()].slice(0, DISCOVERED_TOKEN_TARGET);
   } catch {
     return storedTokens;
+  }
+}
+
+export async function getDiscoveredTokenByMint(mint: string): Promise<DiscoveredDeadToken | undefined> {
+  if (!mint) return undefined;
+  if (isConfigured()) {
+    try {
+      const sb = createSupabaseReadClient();
+      const { data, error } = await sb
+        .from("discovered_dead_tokens")
+        .select("*")
+        .eq("mint", mint)
+        .maybeSingle();
+      if (!error && data) return mapDiscoveredDeadToken(data);
+    } catch {
+      // Fall through to the live sweep below.
+    }
+  }
+  try {
+    return (await findDeadTokenCandidates(DISCOVERED_TOKEN_TARGET)).find((t) => t.mint === mint);
+  } catch {
+    return undefined;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Revival applications — team-led takeovers funded by Pump.fun bounties
+// ----------------------------------------------------------------------------
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function mapRevivalApplication(row: any): RevivalApplication {
+  return {
+    id: row.id,
+    mint: row.mint,
+    tokenName: row.token_name ?? "",
+    tokenSymbol: row.token_symbol ?? "",
+    tokenImageUrl: safeHttpUrl(row.token_image_url),
+    teamName: row.team_name ?? "",
+    pitch: row.pitch ?? "",
+    plan: row.plan ?? "",
+    teamSize: row.team_size ?? 1,
+    teamMembers: row.team_members ?? "",
+    priorWork: row.prior_work ?? "",
+    payoutWallet: row.payout_wallet ?? "",
+    contact: row.contact ?? "",
+    bountyAmountSol: row.bounty_amount_sol == null ? null : Number(row.bounty_amount_sol),
+    bountyPumpfunUrl: safeHttpUrl(row.bounty_pumpfun_url),
+    deliveryProof: row.delivery_proof ?? "",
+    deliveryLinks: row.delivery_links ?? [],
+    deliveredAt: row.delivered_at ?? "",
+    payoutTx: row.payout_tx ?? "",
+    paidAmountSol: row.paid_amount_sol == null ? null : Number(row.paid_amount_sol),
+    paidAt: row.paid_at ?? "",
+    reviewNotes: row.review_notes ?? "",
+    status: (row.status ?? "pending") as RevivalApplicationStatus,
+    createdAt: row.created_at ?? "",
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/** Public revivals: teams that have been selected (approved → paid). */
+export async function getRevivalApplications(): Promise<RevivalApplication[]> {
+  if (!isConfigured()) return [];
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("revival_applications")
+      .select("*")
+      .in("status", ACTIVE_REVIVAL_STATUSES)
+      .order("created_at", { ascending: false });
+    if (error || !data) return [];
+    return data.map(mapRevivalApplication);
+  } catch {
+    return [];
+  }
+}
+
+/** All applications (any status) for a given token mint — used on the apply page. */
+export async function getRevivalApplicationsByMint(mint: string): Promise<RevivalApplication[]> {
+  if (!isConfigured() || !mint) return [];
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("revival_applications")
+      .select("*")
+      .eq("mint", mint)
+      .order("created_at", { ascending: false });
+    if (error || !data) return [];
+    return data.map(mapRevivalApplication);
+  } catch {
+    return [];
+  }
+}
+
+/** Admin review queue: everything, newest first. Caller must verify admin. */
+export async function getApplicationsForReview(): Promise<RevivalApplication[]> {
+  if (!isConfigured()) return [];
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("revival_applications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error || !data) return [];
+    return data.map(mapRevivalApplication);
+  } catch {
+    return [];
+  }
+}
+
+export interface RevivalProgramMetrics {
+  teamsApplied: number;
+  teamsSelected: number;
+  revivalsLive: number;
+  bountySolCommitted: number;
+  bountySolPaid: number;
+}
+
+const EMPTY_PROGRAM_METRICS: RevivalProgramMetrics = {
+  teamsApplied: 0,
+  teamsSelected: 0,
+  revivalsLive: 0,
+  bountySolCommitted: 0,
+  bountySolPaid: 0,
+};
+
+/** Headline numbers for the revival program — real counts only, derived from applications. */
+export async function getRevivalProgramMetrics(): Promise<RevivalProgramMetrics> {
+  if (!isConfigured()) return EMPTY_PROGRAM_METRICS;
+  try {
+    const sb = createSupabaseReadClient();
+    const { data, error } = await sb
+      .from("revival_applications")
+      .select("status, bounty_amount_sol, paid_amount_sol");
+    if (error || !data) return EMPTY_PROGRAM_METRICS;
+    let teamsSelected = 0;
+    let revivalsLive = 0;
+    let bountySolCommitted = 0;
+    let bountySolPaid = 0;
+    for (const row of data) {
+      const status = row.status as RevivalApplicationStatus;
+      if (ACTIVE_REVIVAL_STATUSES.includes(status)) {
+        teamsSelected += 1;
+        bountySolCommitted += Number(row.bounty_amount_sol ?? 0);
+      }
+      if (status === "funded" || status === "delivered" || status === "paid") revivalsLive += 1;
+      if (status === "paid") bountySolPaid += Number(row.paid_amount_sol ?? 0);
+    }
+    return {
+      teamsApplied: data.length,
+      teamsSelected,
+      revivalsLive,
+      bountySolCommitted,
+      bountySolPaid,
+    };
+  } catch {
+    return EMPTY_PROGRAM_METRICS;
   }
 }
 

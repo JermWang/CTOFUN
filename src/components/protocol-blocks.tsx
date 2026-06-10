@@ -25,10 +25,10 @@ import {
 /* ----------------------------------------------------------------- Pipeline */
 export function Pipeline() {
   const P = [
-    { k: "Dormant", d: "Pump.fun-origin", on: true },
-    { k: "Review", d: "Holder-gated", on: true },
-    { k: "Bounties", d: "Funded CTO work", on: true },
-    { k: "Proof", d: "Public revival", on: false },
+    { k: "Discover", d: "Dead Pump.fun tokens", on: true },
+    { k: "Apply", d: "Prove your team", on: true },
+    { k: "Bounty", d: "Funded on Pump.fun", on: true },
+    { k: "Revive", d: "Deliver & earn SOL", on: true },
   ];
   return (
     <div className="pipe">

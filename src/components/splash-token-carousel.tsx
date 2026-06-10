@@ -17,7 +17,22 @@ function wrapIndex(index: number, length: number) {
 }
 
 export function SplashTokenCarousel({ tokens }: { tokens: ProtoCandidate[] }) {
-  const cards = tokens.slice(0, VISIBLE_TOKENS);
+  // Tokens whose artwork 404s at runtime are dropped and backfilled from the
+  // spare pool, so the wheel always shows real-image tokens with no empty slot.
+  const [failed, setFailed] = React.useState<ReadonlySet<string>>(() => new Set());
+  const handleImageError = React.useCallback((id: string) => {
+    setFailed((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
+  const cards = React.useMemo(
+    () => tokens.filter((t) => !failed.has(t.id)).slice(0, VISIBLE_TOKENS),
+    [tokens, failed],
+  );
   const cardCount = cards.length;
   const [rotation, setRotation] = React.useState(0);
   const [paused, setPaused] = React.useState(false);
@@ -141,7 +156,7 @@ export function SplashTokenCarousel({ tokens }: { tokens: ProtoCandidate[] }) {
               aria-current={index === active ? "true" : undefined}
               aria-hidden={index === active ? undefined : "true"}
             >
-              <DiscoverCoinCard c={token} />
+              <DiscoverCoinCard c={token} onImageError={() => handleImageError(token.id)} />
             </div>
           ))}
         </div>

@@ -12,3 +12,10 @@ export const fmtUsd = (n: number | null | undefined): string => {
 };
 
 export const fmtNum = (n: number): string => new Intl.NumberFormat("en").format(n);
+
+/** SOL amount formatter: trims trailing zeros, dash for null. e.g. "12 SOL", "1.5 SOL". */
+export const fmtSol = (n: number | null | undefined): string => {
+  if (n == null) return "-";
+  const rounded = Math.round(n * 1000) / 1000;
+  return `${rounded.toLocaleString("en", { maximumFractionDigits: 3 })} SOL`;
+};

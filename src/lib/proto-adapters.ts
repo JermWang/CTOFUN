@@ -16,20 +16,6 @@ export function riskLevel(score: number): "Low" | "Med" | "High" {
   return score >= 8 ? "Low" : score >= 5 ? "Med" : "High";
 }
 
-/** Static CTO workflow stages → bounty categories (design content). */
-export const WORKFLOW: { k: string; d: string; open: number }[] = [
-  { k: "Scout", d: "Find dormant tokens", open: 4 },
-  { k: "Research", d: "What happened & why", open: 2 },
-  { k: "Audit", d: "Contract & safety", open: 1 },
-  { k: "Lore", d: "Manifesto & narrative", open: 3 },
-  { k: "Design", d: "Identity & assets", open: 5 },
-  { k: "Website", d: "Build or repair", open: 1 },
-  { k: "Social", d: "Channels & campaigns", open: 6 },
-  { k: "Moderation", d: "Telegram & Discord", open: 2 },
-  { k: "Outreach", d: "Ethical holder contact", open: 1 },
-  { k: "Proof", d: "Public revival record", open: 2 },
-];
-
 export function daysUntil(deadline: string): string {
   if (!deadline) return "open";
   const ms = new Date(deadline).getTime() - Date.now();

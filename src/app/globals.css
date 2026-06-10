@@ -841,6 +841,29 @@ body:has(.splash-home) footer.proto {
 .proto .flowcell:hover { transform: translateY(-2px); border-color: rgba(0,229,153,.3) !important; }
 .proto .flowcell.on { border-color: rgba(0,229,153,.45) !important; background: rgba(0,229,153,.06) !important; }
 
+/* holder-facing 3-step revival explainer */
+.proto .flow-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: flowstep; }
+@media (max-width: 760px) { .proto .flow-steps { grid-template-columns: 1fr; } }
+.proto .flowstep { position: relative; padding: 20px; }
+.proto .flowstep-top { display: flex; align-items: center; justify-content: space-between; }
+.proto .flowstep-num { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.proto .flowstep-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; color: var(--green-deep); background: rgba(0,191,122,.12); border: 1px solid rgba(0,191,122,.2); }
+.proto .flowstep-title { font-size: 18px; font-weight: 650; color: var(--ink); margin-top: 14px; }
+.proto .flowstep-body { font-size: 13px; line-height: 1.55; color: var(--dim); margin: 7px 0 0; }
+
+/* honest bounty filter chips with real counts */
+.proto .bounty-filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; }
+.proto .bounty-chip { display: inline-flex; align-items: center; gap: 7px; font: 500 12.5px var(--sans); padding: 8px 12px 8px 14px; border-radius: 999px; cursor: pointer; border: 1px solid rgba(13,31,24,.1); background: rgba(255,255,255,.5); color: var(--dim); transition: border-color .14s, background .14s, color .14s; }
+.proto .bounty-chip:hover { border-color: rgba(0,191,122,.3); color: var(--ink); }
+.proto .bounty-chip.on { border-color: rgba(0,191,122,.42); background: rgba(0,191,122,.1); color: var(--green-deep); }
+.proto .bounty-chip-count { font: 700 10.5px var(--mono); min-width: 18px; padding: 1px 5px; border-radius: 999px; background: rgba(13,31,24,.06); color: var(--faint); }
+.proto .bounty-chip.on .bounty-chip-count { background: rgba(0,191,122,.16); color: var(--green-deep); }
+
+/* honest empty state */
+.proto .bounty-empty { display: flex; flex-direction: column; gap: 6px; padding: 30px 26px; text-align: center; align-items: center; }
+.proto .bounty-empty strong { font-size: 15px; font-weight: 650; color: var(--ink); }
+.proto .bounty-empty span { font-size: 13px; line-height: 1.55; color: var(--dim); max-width: 440px; }
+
 /* status pills for graveyard */
 .proto .statuspill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--dim); }
 
@@ -1374,7 +1397,7 @@ body:has(.splash-home) footer.proto {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 10px 11px 11px;
+  padding: 10px 11px 9px;
 }
 
 .discover-card-head {
@@ -1422,7 +1445,7 @@ body:has(.splash-home) footer.proto {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .discover-minirow span {
@@ -1435,37 +1458,50 @@ body:has(.splash-home) footer.proto {
 
 .discover-blurb {
   display: -webkit-box;
-  min-height: 34px;
-  margin: 8px 0 0;
+  min-height: 28px;
+  margin: 6px 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   color: var(--dim);
   font-size: 12px;
-  line-height: 1.36;
+  line-height: 1.34;
 }
 
 .discover-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 9px;
+  gap: 5px;
+  margin-top: 7px;
 }
 
 .discover-metrics div {
   min-width: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid rgba(13, 31, 24, 0.08);
   background: rgba(239, 247, 242, 0.62);
-  padding: 6px 7px;
+  padding: 3px 6px;
+  line-height: 1.1;
+}
+
+/* Compact label + tight line-heights keep the three metric cells short so the
+   reasons and action rows always fit inside the card's clipped bottom edge.
+   The label must be block-level: as an inline element its line box is inflated
+   by the cell's inherited line-height strut (~19px), padding the cell out. */
+.discover-metrics span {
+  display: block;
+  font-size: 8.5px;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
 }
 
 .discover-metrics strong {
   display: block;
-  margin-top: 3px;
+  margin-top: 1px;
   overflow: hidden;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: 11px;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1476,7 +1512,7 @@ body:has(.splash-home) footer.proto {
   overflow: hidden;
   border-radius: 999px;
   background: rgba(14, 35, 27, 0.08);
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .discover-progress span {
@@ -1490,8 +1526,8 @@ body:has(.splash-home) footer.proto {
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
-  margin-top: 8px;
-  min-height: 20px;
+  margin-top: 7px;
+  min-height: 16px;
   overflow: hidden;
 }
 
@@ -1499,7 +1535,7 @@ body:has(.splash-home) footer.proto {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: 8px;
+  margin-top: 7px;
   max-height: 22px;
   overflow: hidden;
 }
@@ -1525,7 +1561,7 @@ body:has(.splash-home) footer.proto {
   display: flex;
   gap: 6px;
   margin-top: auto;
-  padding-top: 9px;
+  padding-top: 7px;
 }
 
 .discover-card-actions a,
@@ -1536,7 +1572,7 @@ body:has(.splash-home) footer.proto {
   gap: 4px;
   flex: 1;
   min-width: 0;
-  height: 32px;
+  height: 30px;
   border-radius: 10px;
   border: 1px solid rgba(13, 31, 24, 0.1);
   color: var(--ink);

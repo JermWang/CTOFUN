@@ -10,8 +10,9 @@ import { shortAddress } from "@/lib/utils";
 
 const NAV: [string, string][] = [
   ["/discover", "Discover"],
-  ["/graveyard", "Graveyard"],
+  ["/revivals", "Revivals"],
   ["/bounties", "Bounties"],
+  ["/graveyard", "Graveyard"],
   ["/dashboard", "Proof"],
 ];
 
@@ -28,7 +29,7 @@ export function SiteHeader() {
       <div className="hdr">
         <div className="wrap hdr-in">
           <Link href="/" className="brand" aria-label="CTO.fun home">
-            <SiteLogo variant="dark" height={30} priority />
+            <SiteLogo variant="dark" height={15} priority />
           </Link>
           <nav className="nav">
             {NAV.map(([href, label]) => (

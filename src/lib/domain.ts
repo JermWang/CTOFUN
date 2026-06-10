@@ -101,6 +101,38 @@ export const BOUNTY_STATUS_LABELS: Record<BountyStatus, string> = {
 
 export type SubmissionStatus = "pending" | "approved" | "rejected" | "paid" | "disputed";
 
+// ----------------------------------------------------------------------------
+// Revival applications — a team's bid to lead the takeover of a dead token.
+// CTO.fun token fees fund a SOL bounty on Pump.fun; teams apply, get vetted,
+// deliver the revival, and claim the bounty. Mirrors 0009_revival_applications.
+// ----------------------------------------------------------------------------
+export type RevivalApplicationStatus =
+  | "pending"
+  | "approved"
+  | "funded"
+  | "delivered"
+  | "paid"
+  | "rejected"
+  | "failed";
+
+export const REVIVAL_APPLICATION_STATUS_LABELS: Record<RevivalApplicationStatus, string> = {
+  pending: "In review",
+  approved: "Team selected",
+  funded: "Bounty funded",
+  delivered: "Proof submitted",
+  paid: "Bounty paid",
+  rejected: "Not selected",
+  failed: "Did not deliver",
+};
+
+/** Statuses that represent a live, publicly-visible team-led revival. */
+export const ACTIVE_REVIVAL_STATUSES: RevivalApplicationStatus[] = [
+  "approved",
+  "funded",
+  "delivered",
+  "paid",
+];
+
 export type VoteChoice =
   | "revive"
   | "skip"
